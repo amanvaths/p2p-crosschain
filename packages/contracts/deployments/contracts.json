@@ -1,0 +1,28 @@
+{
+  "chains": {
+    "56": {
+      "name": "BSC",
+      "network": "bsc",
+      "rpcUrl": "https://bsc-dataseed1.binance.org",
+      "explorerUrl": "https://bscscan.com",
+      "contracts": {
+        "vault": "0x0000000000000000000000000000000000000000",
+        "usdt": "0x55d398326f99059fF775485246999027B3197955"
+      }
+    },
+    "1555": {
+      "name": "DSC Chain",
+      "network": "dsc",
+      "rpcUrl": "https://rpc01.dscscan.io/",
+      "explorerUrl": "https://dscscan.io",
+      "contracts": {
+        "vault": "0x0000000000000000000000000000000000000000",
+        "usdt": "0xbc27aCEac6865dE31a286Cd9057564393D5251CB"
+      }
+    }
+  },
+  "bridgeRelayer": "0x0000000000000000000000000000000000000000",
+  "deployedAt": "",
+  "lastUpdated": ""
+}
+

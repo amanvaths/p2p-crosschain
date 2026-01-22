@@ -1,0 +1,178 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-geist-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-geist-mono: 'Geist Mono', 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply bg-background text-white antialiased;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+  }
+
+  /* Ensure RainbowKit modal appears above everything */
+  [data-rk] {
+    z-index: 99999 !important;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-surface;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-lighter rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted;
+  }
+}
+
+@layer components {
+  /* Card styles */
+  .card {
+    @apply bg-surface rounded-xl border border-white/5 p-6;
+  }
+
+  .card-hover {
+    @apply card transition-all duration-300 hover:border-primary/20 hover:shadow-lg hover:shadow-primary/5;
+  }
+
+  /* Button styles */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary text-background hover:bg-primary-light active:scale-[0.98];
+  }
+
+  .btn-secondary {
+    @apply btn bg-secondary text-white hover:bg-secondary-light active:scale-[0.98];
+  }
+
+  .btn-outline {
+    @apply btn border border-white/10 bg-transparent text-white hover:bg-white/5 hover:border-white/20;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-white hover:bg-white/5;
+  }
+
+  /* Input styles */
+  .input {
+    @apply w-full rounded-lg border border-white/10 bg-surface-light px-4 py-3 text-white placeholder-muted transition-colors duration-200 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/50;
+  }
+
+  .input-error {
+    @apply input border-error focus:border-error focus:ring-error/50;
+  }
+
+  /* Label */
+  .label {
+    @apply block text-sm font-medium text-white/80 mb-2;
+  }
+
+  /* Badge styles */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-success/10 text-success;
+  }
+
+  .badge-warning {
+    @apply badge bg-warning/10 text-warning;
+  }
+
+  .badge-error {
+    @apply badge bg-error/10 text-error;
+  }
+
+  .badge-muted {
+    @apply badge bg-muted/10 text-muted;
+  }
+
+  /* Timeline */
+  .timeline-step {
+    @apply relative flex items-start gap-4 pb-8 last:pb-0;
+  }
+
+  .timeline-step::before {
+    @apply absolute left-[15px] top-8 h-[calc(100%-32px)] w-0.5 bg-white/10 content-[''] last:hidden;
+  }
+
+  .timeline-dot {
+    @apply relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-white/10 bg-surface;
+  }
+
+  .timeline-dot.active {
+    @apply border-primary bg-primary/10 text-primary;
+  }
+
+  .timeline-dot.completed {
+    @apply border-success bg-success/10 text-success;
+  }
+
+  .timeline-dot.error {
+    @apply border-error bg-error/10 text-error;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent;
+  }
+
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: 0 0 40px -10px theme('colors.primary.DEFAULT');
+  }
+
+  .glow-secondary {
+    box-shadow: 0 0 40px -10px theme('colors.secondary.DEFAULT');
+  }
+}
+
+@layer utilities {
+  /* Fade in animation */
+  .fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Stagger animation delays */
+  .delay-100 { animation-delay: 100ms; }
+  .delay-200 { animation-delay: 200ms; }
+  .delay-300 { animation-delay: 300ms; }
+  .delay-400 { animation-delay: 400ms; }
+  .delay-500 { animation-delay: 500ms; }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl;
+  }
+}
+

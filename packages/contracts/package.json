@@ -1,0 +1,15 @@
+{
+  "name": "@p2p/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "forge build",
+    "test": "forge test -vvv",
+    "test:coverage": "forge coverage",
+    "deploy:bsc": "forge script script/Deploy.s.sol:DeployBSC --rpc-url bsc --broadcast --verify",
+    "deploy:dsc": "forge script script/Deploy.s.sol:DeployDSC --rpc-url dsc --broadcast --verify",
+    "deploy:bsc-testnet": "forge script script/Deploy.s.sol:DeployBSC --rpc-url bsc_testnet --broadcast --verify",
+    "deploy:dsc-testnet": "forge script script/Deploy.s.sol:DeployDSC --rpc-url dsc_testnet --broadcast",
+    "fmt": "forge fmt"
+  }
+}

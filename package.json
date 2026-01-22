@@ -1,0 +1,28 @@
+{
+  "name": "p2p-atomic-exchange",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enterprise-grade P2P cross-chain atomic exchange using HTLC",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "db:generate": "pnpm --filter @p2p/web db:generate",
+    "db:push": "pnpm --filter @p2p/web db:push",
+    "db:migrate": "pnpm --filter @p2p/web db:migrate",
+    "indexer:start": "pnpm --filter @p2p/indexer start",
+    "contracts:build": "pnpm --filter @p2p/contracts build",
+    "contracts:test": "pnpm --filter @p2p/contracts test",
+    "contracts:deploy": "pnpm --filter @p2p/contracts deploy"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.3.0"
+  },
+  "packageManager": "pnpm@8.15.0",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+

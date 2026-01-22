@@ -1,0 +1,171 @@
+// The indexer uses the same schema as the web app
+// This file just points to it for Prisma client generation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Re-use web app schema - copy for reference
+// In production, you might use a shared package or symlink
+
+model Order {
+  id              String      @id @default(uuid())
+  orderId         BigInt      @unique
+  chainId         Int
+  maker           String      @db.VarChar(42)
+  sellToken       String      @db.VarChar(42)
+  sellAmount      String
+  buyToken        String      @db.VarChar(42)
+  buyAmount       String
+  srcChainId      Int
+  dstChainId      Int
+  hashLock        String      @db.VarChar(66)
+  makerTimelock   BigInt
+  takerTimelock   BigInt
+  status          OrderStatus @default(OPEN)
+  cancelled       Boolean     @default(false)
+  secret          String?     @db.VarChar(66)
+  txHash          String      @db.VarChar(66)
+  blockNumber     BigInt
+  logIndex        Int
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  escrows         Escrow[]
+  events          Event[]
+
+  @@index([status])
+  @@index([chainId])
+  @@index([maker])
+  @@index([hashLock])
+  @@index([blockNumber])
+  @@map("orders")
+}
+
+enum OrderStatus {
+  OPEN
+  MAKER_LOCKED
+  TAKER_LOCKED
+  COMPLETED
+  REFUNDED
+  CANCELLED
+  EXPIRED
+}
+
+model Escrow {
+  id              String        @id @default(uuid())
+  orderId         String
+  order           Order         @relation(fields: [orderId], references: [id])
+  lockId          String        @unique @db.VarChar(66)
+  chainId         Int
+  depositor       String        @db.VarChar(42)
+  recipient       String        @db.VarChar(42)
+  token           String        @db.VarChar(42)
+  amount          String
+  hashLock        String        @db.VarChar(66)
+  timelock        BigInt
+  status          EscrowStatus  @default(LOCKED)
+  secret          String?       @db.VarChar(66)
+  claimedTxHash   String?       @db.VarChar(66)
+  refundedTxHash  String?       @db.VarChar(66)
+  txHash          String        @db.VarChar(66)
+  blockNumber     BigInt
+  logIndex        Int
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([orderId])
+  @@index([chainId])
+  @@index([depositor])
+  @@index([hashLock])
+  @@index([status])
+  @@map("escrows")
+}
+
+enum EscrowStatus {
+  LOCKED
+  CLAIMED
+  REFUNDED
+}
+
+model Event {
+  id              String      @id @default(uuid())
+  chainId         Int
+  contractAddress String      @db.VarChar(42)
+  eventName       String
+  txHash          String      @db.VarChar(66)
+  blockNumber     BigInt
+  blockHash       String      @db.VarChar(66)
+  logIndex        Int
+  args            Json
+  processed       Boolean     @default(false)
+  processedAt     DateTime?
+  removed         Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  orderId         String?
+  order           Order?      @relation(fields: [orderId], references: [id])
+
+  @@unique([chainId, txHash, logIndex])
+  @@index([chainId, blockNumber])
+  @@index([eventName])
+  @@index([processed])
+  @@map("events")
+}
+
+model ChainConfig {
+  id              String      @id @default(uuid())
+  chainId         Int         @unique
+  name            String
+  rpcUrl          String
+  orderbookAddress String     @db.VarChar(42)
+  escrowAddress   String      @db.VarChar(42)
+  blockExplorer   String
+  lastIndexedBlock BigInt     @default(0)
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@map("chain_configs")
+}
+
+model IndexerState {
+  id              String      @id @default(uuid())
+  chainId         Int         @unique
+  lastBlockNumber BigInt
+  lastBlockHash   String      @db.VarChar(66)
+  updatedAt       DateTime    @updatedAt
+
+  @@map("indexer_states")
+}
+
+model User {
+  id              String      @id @default(uuid())
+  address         String      @unique @db.VarChar(42)
+  ordersCreated   Int         @default(0)
+  ordersCompleted Int         @default(0)
+  totalVolume     String      @default("0")
+  ens             String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  watchlist       Watchlist[]
+
+  @@map("users")
+}
+
+model Watchlist {
+  id              String      @id @default(uuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  orderOnChainId  BigInt
+  chainId         Int
+  createdAt       DateTime    @default(now())
+
+  @@unique([userId, orderOnChainId, chainId])
+  @@map("watchlists")
+}
+
