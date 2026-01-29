@@ -1405,99 +1405,167 @@ interface OrderRowProps {
 }
 
 function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeClick, onCancelClick }: OrderRowProps) {
+  // Action/Status button component
+  const ActionButton = () => (
+    isMyOrders ? (
+      // My Orders - show status or cancel button
+      order.status === 'OPEN' ? (
+        <button
+          onClick={() => onCancelClick?.(order)}
+          className="px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"
+        >
+          Cancel
+        </button>
+      ) : order.status === 'COMPLETED' ? (
+        <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-500/20 text-green-400">
+          Success
+        </span>
+      ) : order.status === 'CANCELLED' ? (
+        <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400">
+          Cancelled
+        </span>
+      ) : (
+        <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-500/20 text-gray-400">
+          {order.status}
+        </span>
+      )
+    ) : (
+      // Public orders - show SELL/BUY button
+      <button
+        onClick={() => onTradeClick(order)}
+        className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${
+          activeTab === 'buy'
+            ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20'
+            : 'bg-green-500 hover:bg-green-400 text-white shadow-lg shadow-green-500/20'
+        }`}
+      >
+        {activeTab === 'buy' ? 'SELL' : 'BUY'}
+      </button>
+    )
+  );
+
   return (
-    <div
-      className="px-4 py-3 grid grid-cols-12 gap-4 items-center hover:bg-white/[0.02] transition-colors"
-      style={{ animationDelay: `${index * 20}ms` }}
-    >
-      {/* User Address + Order Type */}
-      <div className="col-span-4 flex items-center gap-2">
-        {order.type === 'buy' ? (
-          <img 
-            src="/images/usdt-bep20.png" 
-            alt="BEP20 USDT" 
-            className="w-8 h-8 rounded-full"
-          />
-        ) : (
-          <img 
-            src="/images/dsc-logo.png" 
-            alt="DEP20 USDT" 
-            className="w-8 h-8 rounded-full"
-          />
-        )}
-        <div className="flex flex-col">
-          <span className="font-mono text-sm text-white/80">
-            {order.userAddress}
-          </span>
-          {isMyOrders && (
-            <span className={`text-xs font-bold ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-              {order.type === 'buy' ? '↓ BUY Order' : '↑ SELL Order'}
-            </span>
+    <>
+      {/* Desktop View - Grid Layout */}
+      <div
+        className="hidden md:grid px-4 py-3 grid-cols-12 gap-4 items-center hover:bg-white/[0.02] transition-colors"
+        style={{ animationDelay: `${index * 20}ms` }}
+      >
+        {/* User Address + Order Type */}
+        <div className="col-span-4 flex items-center gap-2">
+          {order.type === 'buy' ? (
+            <img 
+              src="/images/usdt-bep20.png" 
+              alt="BEP20 USDT" 
+              className="w-8 h-8 rounded-full"
+            />
+          ) : (
+            <img 
+              src="/images/dsc-logo.png" 
+              alt="DEP20 USDT" 
+              className="w-8 h-8 rounded-full"
+            />
           )}
+          <div className="flex flex-col">
+            <span className="font-mono text-sm text-white/80">
+              {order.userAddress}
+            </span>
+            {isMyOrders && (
+              <span className={`text-xs font-bold ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                {order.type === 'buy' ? '↓ BUY Order' : '↑ SELL Order'}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Amount */}
+        <div className="col-span-2 text-right">
+          <span className="font-semibold text-white">
+            {Number(order.amount).toLocaleString()}
+          </span>
+          <span className={`text-xs ml-1 ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+            {order.type === 'buy' ? 'BEP20 USDT' : 'DEP20 USDT'}
+          </span>
+        </div>
+
+        {/* Price */}
+        <div className="col-span-2 text-right">
+          <span className="text-white/80">${order.price}</span>
+        </div>
+
+        {/* Time */}
+        <div className="col-span-2 text-center">
+          <span className="text-muted text-sm">
+            {formatTimeAgo(order.timestamp)}
+          </span>
+        </div>
+
+        {/* Action Button / Status */}
+        <div className="col-span-2 text-center">
+          <ActionButton />
         </div>
       </div>
 
-      {/* Amount */}
-      <div className="col-span-2 text-right">
-        <span className="font-semibold text-white">
-          {Number(order.amount).toLocaleString()}
-        </span>
-        <span className={`text-xs ml-1 ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-          {order.type === 'buy' ? 'BEP20 USDT' : 'DEP20 USDT'}
-        </span>
-      </div>
-
-      {/* Price */}
-      <div className="col-span-2 text-right">
-        <span className="text-white/80">${order.price}</span>
-      </div>
-
-      {/* Time */}
-      <div className="col-span-2 text-center">
-        <span className="text-muted text-sm">
-          {formatTimeAgo(order.timestamp)}
-        </span>
-      </div>
-
-      {/* Action Button / Status */}
-      <div className="col-span-2 text-center">
-        {isMyOrders ? (
-          // My Orders - show status or cancel button
-          order.status === 'OPEN' ? (
-            <button
-              onClick={() => onCancelClick?.(order)}
-              className="px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"
-            >
-              Cancel
-            </button>
-          ) : order.status === 'COMPLETED' ? (
-            <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-500/20 text-green-400">
-              Success
+      {/* Mobile View - Card Layout */}
+      <div
+        className="md:hidden p-4 hover:bg-white/[0.02] transition-colors"
+        style={{ animationDelay: `${index * 20}ms` }}
+      >
+        <div className="bg-surface-light rounded-xl p-4 border border-white/10">
+          {/* Top Row - User & Type Badge */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              {order.type === 'buy' ? (
+                <img 
+                  src="/images/usdt-bep20.png" 
+                  alt="BEP20 USDT" 
+                  className="w-10 h-10 rounded-full"
+                />
+              ) : (
+                <img 
+                  src="/images/dsc-logo.png" 
+                  alt="DEP20 USDT" 
+                  className="w-10 h-10 rounded-full"
+                />
+              )}
+              <div className="flex flex-col">
+                <span className="font-mono text-sm text-white/80">
+                  {order.userAddress}
+                </span>
+                <span className={`text-xs font-bold ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                  {order.type === 'buy' ? '↓ BUY Order' : '↑ SELL Order'}
+                </span>
+              </div>
+            </div>
+            <span className="text-muted text-xs">
+              {formatTimeAgo(order.timestamp)}
             </span>
-          ) : order.status === 'CANCELLED' ? (
-            <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400">
-              Cancelled
-            </span>
-          ) : (
-            <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-500/20 text-gray-400">
-              {order.status}
-            </span>
-          )
-        ) : (
-          // Public orders - show SELL/BUY button
-          <button
-            onClick={() => onTradeClick(order)}
-            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${
-              activeTab === 'buy'
-                ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20'
-                : 'bg-green-500 hover:bg-green-400 text-white shadow-lg shadow-green-500/20'
-            }`}
-          >
-            {activeTab === 'buy' ? 'SELL' : 'BUY'}
-          </button>
-        )}
+          </div>
+
+          {/* Middle Row - Amount & Price */}
+          <div className="flex items-center justify-between mb-3 py-2 border-y border-white/5">
+            <div>
+              <div className="text-xs text-muted mb-1">Amount</div>
+              <div className="font-semibold text-white text-lg">
+                {Number(order.amount).toLocaleString()}
+                <span className={`text-xs ml-1 ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
+                  {order.type === 'buy' ? 'BEP20' : 'DEP20'}
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-muted mb-1">Price</div>
+              <div className="font-semibold text-white text-lg">${order.price}</div>
+            </div>
+          </div>
+
+          {/* Bottom Row - Action Button */}
+          <div className="flex justify-end">
+            <ActionButton />
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1906,8 +1974,8 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Table Header */}
-            <div className="bg-surface-light border-x border-white/5 px-4 py-3 grid grid-cols-12 gap-4 text-xs text-muted uppercase tracking-wider">
+        {/* Table Header - Hidden on Mobile */}
+            <div className="hidden md:grid bg-surface-light border-x border-white/5 px-4 py-3 grid-cols-12 gap-4 text-xs text-muted uppercase tracking-wider">
               <div className="col-span-4">{showMyOrders ? 'User / Type' : 'User'}</div>
               <div className="col-span-2 text-right">Amount</div>
               <div className="col-span-2 text-right">Price</div>
