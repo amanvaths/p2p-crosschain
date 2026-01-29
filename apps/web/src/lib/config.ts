@@ -32,7 +32,8 @@ export const CHAIN_B = {
     process.env.NEXT_PUBLIC_CHAIN_B_BLOCK_EXPLORER || 'https://sepolia.basescan.org',
 };
 
-export const CHAIN_CONFIGS: Record<number, typeof CHAIN_A> = {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const CHAIN_CONFIGS: Record<number, any> = {
   [sepolia.id]: CHAIN_A,
   [baseSepolia.id]: CHAIN_B,
 };

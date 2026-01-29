@@ -1004,7 +1004,6 @@ function TradeConfirmModalInner({
                   {getConfirmStatus() === 'confirming' && '⏳ Confirming on chain...'}
                   {getConfirmStatus() === 'done' && '✅ Confirmed'}
                   {getConfirmStatus() === 'pending' && 'Waiting for approval...'}
-                  {getConfirmStatus() === 'ready' && 'Ready to confirm'}
                 </div>
               </div>
               {fillHash && getConfirmStatus() === 'confirming' && (

@@ -39,6 +39,8 @@ export interface Order {
   makerTimelock: bigint;
   takerTimelock: bigint;
   status: OrderStatus;
+  txHash?: Hash;
+  secret?: Hex;
   createdAt: Date;
   updatedAt: Date;
 }

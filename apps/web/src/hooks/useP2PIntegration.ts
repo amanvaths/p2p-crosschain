@@ -184,9 +184,9 @@ export function useP2PIntegration() {
         abi: P2PVaultBSCABI,
         functionName: 'getOrder',
         args: [orderId],
-      }) as [Address, bigint, bigint, number, number, bigint];
+      }) as readonly [Address, number, number, bigint, bigint, bigint];
       
-      const status = result[3]; // Status is at index 3
+      const status = result[1]; // Status is at index 1 (user, status, orderType, amount, filledAmount, expiresAt)
       
       switch (status) {
         case 0: return 'open';

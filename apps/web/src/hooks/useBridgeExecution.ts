@@ -329,12 +329,12 @@ export function useBridgeExecution(bscOrderId?: bigint) {
    * Get timeline steps for UI display
    */
   const getTimelineSteps = useCallback(() => {
-    const steps = [
-      { id: 1, label: 'Create Order (BSC)', status: 'pending' as const },
-      { id: 2, label: 'Sign Order', status: 'pending' as const },
-      { id: 3, label: 'Fill Order (DSC)', status: 'pending' as const },
-      { id: 4, label: 'Settlement (BSC)', status: 'pending' as const },
-      { id: 5, label: 'Complete', status: 'pending' as const },
+    const steps: Array<{ id: number; label: string; status: 'pending' | 'active' | 'complete' }> = [
+      { id: 1, label: 'Create Order (BSC)', status: 'pending' },
+      { id: 2, label: 'Sign Order', status: 'pending' },
+      { id: 3, label: 'Fill Order (DSC)', status: 'pending' },
+      { id: 4, label: 'Settlement (BSC)', status: 'pending' },
+      { id: 5, label: 'Complete', status: 'pending' },
     ];
 
     switch (bridgeState.status) {

@@ -180,6 +180,20 @@ export const P2PEscrowHTLCABI = [
     outputs: [{ name: '', type: 'bytes32' }],
     stateMutability: 'pure',
   },
+  {
+    type: 'function',
+    name: 'canClaim',
+    inputs: [{ name: 'lockId', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'canRefund',
+    inputs: [{ name: 'lockId', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
 
   // Write Functions
   {

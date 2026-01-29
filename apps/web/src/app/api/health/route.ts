@@ -30,11 +30,18 @@ export async function GET() {
 
   // Check Redis
   try {
-    await redis.ping();
-    health.services = {
-      ...(health.services as object),
-      redis: { status: 'ok' },
-    };
+    if (redis) {
+      await redis.ping();
+      health.services = {
+        ...(health.services as object),
+        redis: { status: 'ok' },
+      };
+    } else {
+      health.services = {
+        ...(health.services as object),
+        redis: { status: 'not_configured' },
+      };
+    }
   } catch (error) {
     health.status = 'degraded';
     health.services = {
