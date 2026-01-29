@@ -17,7 +17,9 @@ export {
   useCancelDscOrder,
   useDscOrder,
   useDscOpenOrders,
-  useIsBscOrderMatched,
+  useGetDscOrderForBscOrder,
+  useUserDscOrders,
+  useAllUserOrders,
   
   // Combined
   useP2POrders,
@@ -25,6 +27,7 @@ export {
   // Types
   type BscOrder,
   type DscOrder,
+  type UserOrderWithStatus,
 } from './useP2PVault';
 
 // Order Signing (EIP-712)

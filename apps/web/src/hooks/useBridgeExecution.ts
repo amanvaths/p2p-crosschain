@@ -13,7 +13,7 @@ import {
   getContractAddress,
   OrderStatus,
 } from '@/lib/contracts';
-import { useBscOrder, useDscOrder, useIsBscOrderMatched } from './useP2PVault';
+import { useBscOrder, useDscOrder, useGetDscOrderForBscOrder } from './useP2PVault';
 import type { SignedOrder } from './useOrderSigning';
 
 // =============================================================================
@@ -66,7 +66,10 @@ export function useBridgeExecution(bscOrderId?: bigint) {
 
   // Order states
   const { order: bscOrder, refetch: refetchBscOrder } = useBscOrder(bscOrderId);
-  const { data: isMatched, refetch: refetchIsMatched } = useIsBscOrderMatched(bscOrderId);
+  // V2: Get DSC order ID for BSC order (non-zero means matched)
+  const { data: dscOrderForBsc, refetch: refetchDscOrder } = useGetDscOrderForBscOrder(bscOrderId);
+  const isMatched = dscOrderForBsc ? dscOrderForBsc > 0n : false;
+  const refetchIsMatched = refetchDscOrder;
 
   // Bridge state
   const [bridgeState, setBridgeState] = useState<BridgeState>({

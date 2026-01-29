@@ -215,6 +215,122 @@ export const P2PEscrowHTLCABI = [
   },
 ] as const;
 
+// =============================================================================
+// P2PVaultBSC ABI (Buy Orders)
+// =============================================================================
+export const P2PVaultBSCABI = [
+  // Events
+  {
+    type: 'event',
+    name: 'OrderCreated',
+    inputs: [
+      { name: 'orderId', type: 'uint256', indexed: true },
+      { name: 'buyer', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'expiresAt', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'OrderMatched',
+    inputs: [
+      { name: 'orderId', type: 'uint256', indexed: true },
+      { name: 'buyer', type: 'address', indexed: true },
+      { name: 'seller', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'OrderCompleted',
+    inputs: [
+      { name: 'orderId', type: 'uint256', indexed: true },
+      { name: 'buyer', type: 'address', indexed: true },
+      { name: 'seller', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'dscTxHash', type: 'bytes32', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'OrderCancelled',
+    inputs: [
+      { name: 'orderId', type: 'uint256', indexed: true },
+      { name: 'buyer', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'OrderRefunded',
+    inputs: [
+      { name: 'orderId', type: 'uint256', indexed: true },
+      { name: 'buyer', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+] as const;
+
+// =============================================================================
+// P2PVaultDSC ABI (Sell Orders / Fill Orders)
+// =============================================================================
+export const P2PVaultDSCABI = [
+  // Events
+  {
+    type: 'event',
+    name: 'SellOrderCreated',
+    inputs: [
+      { name: 'orderId', type: 'uint256', indexed: true },
+      { name: 'seller', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'expiresAt', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'DirectFillCreated',
+    inputs: [
+      { name: 'dscOrderId', type: 'uint256', indexed: true },
+      { name: 'bscOrderId', type: 'uint256', indexed: true },
+      { name: 'seller', type: 'address', indexed: true },
+      { name: 'buyer', type: 'address', indexed: false },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'OrderMatched',
+    inputs: [
+      { name: 'dscOrderId', type: 'uint256', indexed: true },
+      { name: 'bscOrderId', type: 'uint256', indexed: true },
+      { name: 'seller', type: 'address', indexed: true },
+      { name: 'buyer', type: 'address', indexed: false },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'OrderCompleted',
+    inputs: [
+      { name: 'dscOrderId', type: 'uint256', indexed: true },
+      { name: 'bscOrderId', type: 'uint256', indexed: true },
+      { name: 'seller', type: 'address', indexed: false },
+      { name: 'buyer', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'bscTxHash', type: 'bytes32', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'OrderCancelled',
+    inputs: [
+      { name: 'orderId', type: 'uint256', indexed: true },
+      { name: 'seller', type: 'address', indexed: true },
+      { name: 'amount', type: 'uint256', indexed: false },
+    ],
+  },
+] as const;
+
 // Standard ERC20 ABI (minimal for approve/transfer)
 export const ERC20ABI = [
   {

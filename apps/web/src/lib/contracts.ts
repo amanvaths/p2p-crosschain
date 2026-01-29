@@ -21,16 +21,17 @@ export interface ContractAddresses {
   bridgeRelayer: Address;
 }
 
+// V2 CONTRACTS - With partial fills and instant matching
 export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
-  // BSC Chain
+  // BSC Chain - V2 Contract
   [BSC_CHAIN_ID]: {
-    vault: (process.env.NEXT_PUBLIC_CHAIN_A_VAULT_CONTRACT || '0x0000000000000000000000000000000000000000') as Address,
+    vault: (process.env.NEXT_PUBLIC_CHAIN_A_VAULT_CONTRACT || '0x2d66cd7d401b840f5e5b9f4a75794359126fe250') as Address,
     usdt: (process.env.NEXT_PUBLIC_CHAIN_A_USDT_CONTRACT || '0x55d398326f99059fF775485246999027B3197955') as Address,
     bridgeRelayer: (process.env.NEXT_PUBLIC_BRIDGE_RELAYER || '0x0000000000000000000000000000000000000000') as Address,
   },
-  // DSC Chain
+  // DSC Chain - V2 Contract
   [DSC_CHAIN_ID]: {
-    vault: (process.env.NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT || '0x0000000000000000000000000000000000000000') as Address,
+    vault: (process.env.NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT || '0xdd8bbebc2b41e09ee5196c7e8436e625e4788b2d') as Address,
     usdt: (process.env.NEXT_PUBLIC_CHAIN_B_USDT_CONTRACT || '0xbc27aCEac6865dE31a286Cd9057564393D5251CB') as Address,
     bridgeRelayer: (process.env.NEXT_PUBLIC_BRIDGE_RELAYER || '0x0000000000000000000000000000000000000000') as Address,
   },
@@ -49,6 +50,7 @@ export function getContractAddress(chainId: number, contract: keyof ContractAddr
 // P2PVaultBSC ABI
 // =============================================================================
 
+// V2 Contract ABI - with partial fills
 export const P2PVaultBSCABI = [
   // Events
   {
@@ -56,19 +58,21 @@ export const P2PVaultBSCABI = [
     name: 'OrderCreated',
     inputs: [
       { name: 'orderId', type: 'uint256', indexed: true },
-      { name: 'buyer', type: 'address', indexed: true },
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'orderType', type: 'uint8', indexed: false },
       { name: 'amount', type: 'uint256', indexed: false },
       { name: 'expiresAt', type: 'uint256', indexed: false },
     ],
   },
   {
     type: 'event',
-    name: 'OrderMatched',
+    name: 'OrderFilled',
     inputs: [
-      { name: 'orderId', type: 'uint256', indexed: true },
-      { name: 'buyer', type: 'address', indexed: true },
-      { name: 'seller', type: 'address', indexed: true },
+      { name: 'bscOrderId', type: 'uint256', indexed: true },
+      { name: 'dscOrderId', type: 'uint256', indexed: true },
+      { name: 'filler', type: 'address', indexed: true },
       { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'isPartial', type: 'bool', indexed: false },
     ],
   },
   {
@@ -76,10 +80,9 @@ export const P2PVaultBSCABI = [
     name: 'OrderCompleted',
     inputs: [
       { name: 'orderId', type: 'uint256', indexed: true },
-      { name: 'buyer', type: 'address', indexed: true },
-      { name: 'seller', type: 'address', indexed: true },
-      { name: 'amount', type: 'uint256', indexed: false },
-      { name: 'dscTxHash', type: 'bytes32', indexed: false },
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'totalAmount', type: 'uint256', indexed: false },
+      { name: 'fillCount', type: 'uint256', indexed: false },
     ],
   },
   {
@@ -87,17 +90,8 @@ export const P2PVaultBSCABI = [
     name: 'OrderCancelled',
     inputs: [
       { name: 'orderId', type: 'uint256', indexed: true },
-      { name: 'buyer', type: 'address', indexed: true },
-      { name: 'amount', type: 'uint256', indexed: false },
-    ],
-  },
-  {
-    type: 'event',
-    name: 'OrderRefunded',
-    inputs: [
-      { name: 'orderId', type: 'uint256', indexed: true },
-      { name: 'buyer', type: 'address', indexed: true },
-      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'refundAmount', type: 'uint256', indexed: false },
     ],
   },
   // Read Functions
@@ -113,14 +107,12 @@ export const P2PVaultBSCABI = [
     name: 'getOrder',
     inputs: [{ name: 'orderId', type: 'uint256' }],
     outputs: [
-      { name: 'buyer', type: 'address' },
+      { name: 'user', type: 'address' },
       { name: 'status', type: 'uint8' },
+      { name: 'orderType', type: 'uint8' },
       { name: 'amount', type: 'uint256' },
-      { name: 'createdAt', type: 'uint256' },
+      { name: 'filledAmount', type: 'uint256' },
       { name: 'expiresAt', type: 'uint256' },
-      { name: 'matchedSeller', type: 'address' },
-      { name: 'matchedAt', type: 'uint256' },
-      { name: 'dscTxHash', type: 'bytes32' },
     ],
     stateMutability: 'view',
   },
@@ -154,8 +146,9 @@ export const P2PVaultBSCABI = [
     ],
     outputs: [
       { name: 'orderIds', type: 'uint256[]' },
-      { name: 'buyers', type: 'address[]' },
+      { name: 'users', type: 'address[]' },
       { name: 'amounts', type: 'uint256[]' },
+      { name: 'remainingAmounts', type: 'uint256[]' },
       { name: 'expiresAts', type: 'uint256[]' },
     ],
     stateMutability: 'view',
@@ -163,13 +156,6 @@ export const P2PVaultBSCABI = [
   {
     type: 'function',
     name: 'totalLocked',
-    inputs: [],
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'orderExpiryTime',
     inputs: [],
     outputs: [{ name: '', type: 'uint256' }],
     stateMutability: 'view',
@@ -189,85 +175,46 @@ export const P2PVaultBSCABI = [
     outputs: [],
     stateMutability: 'nonpayable',
   },
-  {
-    type: 'function',
-    name: 'refundExpiredOrder',
-    inputs: [{ name: 'orderId', type: 'uint256' }],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  // Bridge Relayer Functions
-  {
-    type: 'function',
-    name: 'matchOrder',
-    inputs: [
-      { name: 'orderId', type: 'uint256' },
-      { name: 'seller', type: 'address' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'completeOrder',
-    inputs: [
-      { name: 'orderId', type: 'uint256' },
-      { name: 'seller', type: 'address' },
-      { name: 'dscTxHash', type: 'bytes32' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
 ] as const;
 
 // =============================================================================
 // P2PVaultDSC ABI
 // =============================================================================
 
+// V2 Contract ABI - with partial fills
 export const P2PVaultDSCABI = [
   // Events
   {
     type: 'event',
-    name: 'SellOrderCreated',
+    name: 'OrderCreated',
     inputs: [
       { name: 'orderId', type: 'uint256', indexed: true },
-      { name: 'seller', type: 'address', indexed: true },
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'orderType', type: 'uint8', indexed: false },
       { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'linkedBscOrderId', type: 'uint256', indexed: false },
       { name: 'expiresAt', type: 'uint256', indexed: false },
     ],
   },
   {
     type: 'event',
-    name: 'DirectFillCreated',
+    name: 'OrderFilled',
     inputs: [
       { name: 'dscOrderId', type: 'uint256', indexed: true },
       { name: 'bscOrderId', type: 'uint256', indexed: true },
-      { name: 'seller', type: 'address', indexed: true },
-      { name: 'buyer', type: 'address', indexed: false },
+      { name: 'recipient', type: 'address', indexed: true },
       { name: 'amount', type: 'uint256', indexed: false },
-    ],
-  },
-  {
-    type: 'event',
-    name: 'OrderMatched',
-    inputs: [
-      { name: 'dscOrderId', type: 'uint256', indexed: true },
-      { name: 'bscOrderId', type: 'uint256', indexed: true },
-      { name: 'seller', type: 'address', indexed: true },
-      { name: 'buyer', type: 'address', indexed: false },
-      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'isPartial', type: 'bool', indexed: false },
     ],
   },
   {
     type: 'event',
     name: 'OrderCompleted',
     inputs: [
-      { name: 'dscOrderId', type: 'uint256', indexed: true },
-      { name: 'bscOrderId', type: 'uint256', indexed: true },
-      { name: 'seller', type: 'address', indexed: false },
-      { name: 'buyer', type: 'address', indexed: true },
-      { name: 'amount', type: 'uint256', indexed: false },
-      { name: 'bscTxHash', type: 'bytes32', indexed: false },
+      { name: 'orderId', type: 'uint256', indexed: true },
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'totalAmount', type: 'uint256', indexed: false },
+      { name: 'fillCount', type: 'uint256', indexed: false },
     ],
   },
   {
@@ -275,8 +222,8 @@ export const P2PVaultDSCABI = [
     name: 'OrderCancelled',
     inputs: [
       { name: 'orderId', type: 'uint256', indexed: true },
-      { name: 'seller', type: 'address', indexed: true },
-      { name: 'amount', type: 'uint256', indexed: false },
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'refundAmount', type: 'uint256', indexed: false },
     ],
   },
   // Read Functions
@@ -292,16 +239,12 @@ export const P2PVaultDSCABI = [
     name: 'getOrder',
     inputs: [{ name: 'orderId', type: 'uint256' }],
     outputs: [
-      { name: 'seller', type: 'address' },
+      { name: 'user', type: 'address' },
       { name: 'status', type: 'uint8' },
       { name: 'orderType', type: 'uint8' },
       { name: 'amount', type: 'uint256' },
-      { name: 'createdAt', type: 'uint256' },
+      { name: 'filledAmount', type: 'uint256' },
       { name: 'expiresAt', type: 'uint256' },
-      { name: 'matchedBuyer', type: 'address' },
-      { name: 'matchedBscOrderId', type: 'uint256' },
-      { name: 'matchedAt', type: 'uint256' },
-      { name: 'bscTxHash', type: 'bytes32' },
     ],
     stateMutability: 'view',
   },
@@ -321,13 +264,6 @@ export const P2PVaultDSCABI = [
   },
   {
     type: 'function',
-    name: 'isBscOrderMatched',
-    inputs: [{ name: 'bscOrderId', type: 'uint256' }],
-    outputs: [{ name: '', type: 'bool' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
     name: 'getDscOrderForBscOrder',
     inputs: [{ name: 'bscOrderId', type: 'uint256' }],
     outputs: [{ name: '', type: 'uint256' }],
@@ -342,9 +278,26 @@ export const P2PVaultDSCABI = [
     ],
     outputs: [
       { name: 'orderIds', type: 'uint256[]' },
-      { name: 'sellers', type: 'address[]' },
+      { name: 'users', type: 'address[]' },
       { name: 'amounts', type: 'uint256[]' },
+      { name: 'remainingAmounts', type: 'uint256[]' },
       { name: 'expiresAts', type: 'uint256[]' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getPendingFillOrders',
+    inputs: [
+      { name: 'offset', type: 'uint256' },
+      { name: 'limit', type: 'uint256' },
+    ],
+    outputs: [
+      { name: 'orderIds', type: 'uint256[]' },
+      { name: 'sellers', type: 'address[]' },
+      { name: 'buyers', type: 'address[]' },
+      { name: 'amounts', type: 'uint256[]' },
+      { name: 'bscOrderIds', type: 'uint256[]' },
     ],
     stateMutability: 'view',
   },
@@ -368,7 +321,7 @@ export const P2PVaultDSCABI = [
     name: 'fillBscBuyOrder',
     inputs: [
       { name: 'bscOrderId', type: 'uint256' },
-      { name: 'buyer', type: 'address' },
+      { name: 'bscBuyer', type: 'address' },
       { name: 'amount', type: 'uint256' },
     ],
     outputs: [{ name: 'orderId', type: 'uint256' }],
@@ -376,14 +329,7 @@ export const P2PVaultDSCABI = [
   },
   {
     type: 'function',
-    name: 'cancelSellOrder',
-    inputs: [{ name: 'orderId', type: 'uint256' }],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'refundExpiredOrder',
+    name: 'cancelOrder',
     inputs: [{ name: 'orderId', type: 'uint256' }],
     outputs: [],
     stateMutability: 'nonpayable',

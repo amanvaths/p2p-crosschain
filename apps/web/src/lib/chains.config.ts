@@ -111,3 +111,21 @@ export const getChainById = (chainId: number): ChainConfig | undefined => {
 // Default chain
 export const DEFAULT_CHAIN = CHAIN_A;
 
+// =============================================================================
+// Simple Config Object for easy access
+// =============================================================================
+export const chainsConfig = {
+  bsc: {
+    chainId: CHAIN_A.id,
+    rpcUrl: CHAIN_A.rpcUrl,
+    vaultContract: process.env.NEXT_PUBLIC_CHAIN_A_VAULT_CONTRACT || '0x7e891720D77546Ef159ef72871EbaAe3896fcc23',
+    usdtContract: CHAIN_A.tokens.usdt.address,
+  },
+  dsc: {
+    chainId: CHAIN_B.id,
+    rpcUrl: CHAIN_B.rpcUrl,
+    vaultContract: process.env.NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT || '0xb4e3Ce07DD861dC10da09Ef7574A07b73470D99d',
+    usdtContract: CHAIN_B.tokens.usdt.address,
+  },
+};
+

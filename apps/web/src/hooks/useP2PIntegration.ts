@@ -6,8 +6,9 @@
 // =============================================================================
 
 import { useCallback, useState, useEffect } from 'react';
-import { useAccount, useChainId, useSwitchChain } from 'wagmi';
-import { parseUnits, formatUnits, type Address, type Hash } from 'viem';
+import { useAccount, useChainId, useSwitchChain, usePublicClient } from 'wagmi';
+import { parseUnits, formatUnits, type Address, type Hash, createPublicClient, http } from 'viem';
+import { bsc } from 'viem/chains';
 import {
   useCreateBuyOrder,
   useFillBscOrder,
@@ -20,7 +21,8 @@ import {
 } from './useP2PVault';
 import { useOrderSigning } from './useOrderSigning';
 import { useBridgeExecution, BridgeStatus } from './useBridgeExecution';
-import { BSC_CHAIN_ID, DSC_CHAIN_ID, OrderStatus } from '@/lib/contracts';
+import { BSC_CHAIN_ID, DSC_CHAIN_ID, OrderStatus, P2PVaultBSCABI } from '@/lib/contracts';
+import { chainsConfig } from '@/lib/chains.config';
 
 // =============================================================================
 // Types
@@ -31,6 +33,7 @@ export interface UIOrder {
   orderId: bigint;
   chainId: number;
   userAddress: string;
+  fullAddress: string; // Full address for contract calls
   amount: string;
   amountWei: bigint;
   timestamp: number;
@@ -54,15 +57,16 @@ export interface TransactionState {
 export function useP2PIntegration() {
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const { switchChain } = useSwitchChain();
+  const { switchChain, switchChainAsync } = useSwitchChain();
+  const publicClient = usePublicClient();
 
   // Transaction state
   const [txState, setTxState] = useState<TransactionState>({ step: 'idle' });
 
   // Contract hooks
-  const createBuyOrder = useCreateBuyOrder();
+  const createBuyOrderHook = useCreateBuyOrder();
   const createSellOrder = useCreateSellOrder();
-  const fillBscOrder = useFillBscOrder();
+  const fillBscOrderHook = useFillBscOrder();
   const cancelBscOrder = useCancelBscOrder();
   const cancelDscOrder = useCancelDscOrder();
   const orderSigning = useOrderSigning();
@@ -75,10 +79,127 @@ export function useP2PIntegration() {
   // Reset transaction state
   const resetTxState = useCallback(() => {
     setTxState({ step: 'idle' });
-    createBuyOrder.reset();
+    createBuyOrderHook.reset();
     createSellOrder.reset();
-    fillBscOrder.reset();
-  }, [createBuyOrder, createSellOrder, fillBscOrder]);
+    fillBscOrderHook.reset();
+  }, [createBuyOrderHook, createSellOrder, fillBscOrderHook]);
+
+  // =============================================================================
+  // NEW: Individual functions for step-by-step modal
+  // =============================================================================
+
+  // Switch to specific chain
+  const switchToChain = useCallback(async (targetChainId: number): Promise<void> => {
+    if (chainId !== targetChainId) {
+      await switchChainAsync({ chainId: targetChainId });
+      // Wait for chain switch to propagate
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+  }, [chainId, switchChainAsync]);
+
+  // Approve token for spending (returns tx hash)
+  const approveToken = useCallback(async (
+    chain: 'bsc' | 'dsc', 
+    amount: string
+  ): Promise<{ hash: Hash } | null> => {
+    const amountWei = parseUnits(amount, 18);
+    
+    if (chain === 'bsc') {
+      // Check if approval already sufficient
+      if (!createBuyOrderHook.needsApproval(amount)) {
+        return { hash: '0x0' as Hash }; // Already approved
+      }
+      await createBuyOrderHook.approve(amountWei);
+      // Return the approval tx hash from the hook
+      return { hash: createBuyOrderHook.hash || '0x0' as Hash };
+    } else {
+      // DSC approval for fill order
+      if (!fillBscOrderHook.needsApproval(amount)) {
+        return { hash: '0x0' as Hash }; // Already approved
+      }
+      await fillBscOrderHook.approve(amountWei);
+      return { hash: fillBscOrderHook.hash || '0x0' as Hash };
+    }
+  }, [createBuyOrderHook, fillBscOrderHook]);
+
+  // Fill BSC order (returns tx hash)
+  const fillBscOrder = useCallback(async (
+    bscOrderId: bigint,
+    buyer: Address,
+    amount: string
+  ): Promise<{ hash: Hash } | null> => {
+    await fillBscOrderHook.fillBscBuyOrder(bscOrderId, buyer, amount);
+    // Wait for the hook to update with the hash
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return { hash: fillBscOrderHook.hash || '0x0' as Hash };
+  }, [fillBscOrderHook]);
+
+  // Create buy order (returns tx hash)
+  const createBuyOrder = useCallback(async (
+    amount: string
+  ): Promise<{ hash: Hash } | null> => {
+    await createBuyOrderHook.createBuyOrder(amount);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return { hash: createBuyOrderHook.hash || '0x0' as Hash };
+  }, [createBuyOrderHook]);
+
+  // Wait for transaction confirmation
+  const waitForTransaction = useCallback(async (
+    hash: Hash,
+    targetChainId: number
+  ): Promise<void> => {
+    if (hash === '0x0') return; // Skip if no hash (already approved)
+    
+    // Create client for the target chain
+    const rpcUrl = targetChainId === BSC_CHAIN_ID 
+      ? chainsConfig.bsc.rpcUrl 
+      : chainsConfig.dsc.rpcUrl;
+    
+    const client = createPublicClient({
+      chain: targetChainId === BSC_CHAIN_ID ? bsc : {
+        id: 1555,
+        name: 'DSC Chain',
+        nativeCurrency: { name: 'DSC', symbol: 'DSC', decimals: 18 },
+        rpcUrls: { default: { http: [rpcUrl] } },
+      },
+      transport: http(rpcUrl),
+    });
+    
+    // Wait for receipt
+    await client.waitForTransactionReceipt({ hash, confirmations: 1 });
+  }, []);
+
+  // Check order status
+  const checkOrderStatus = useCallback(async (
+    orderId: bigint
+  ): Promise<'open' | 'matched' | 'completed' | 'cancelled'> => {
+    try {
+      const client = createPublicClient({
+        chain: bsc,
+        transport: http(chainsConfig.bsc.rpcUrl),
+      });
+      
+      const result = await client.readContract({
+        address: chainsConfig.bsc.vaultContract as Address,
+        abi: P2PVaultBSCABI,
+        functionName: 'getOrder',
+        args: [orderId],
+      }) as [Address, bigint, bigint, number, number, bigint];
+      
+      const status = result[3]; // Status is at index 3
+      
+      switch (status) {
+        case 0: return 'open';
+        case 1: return 'matched';
+        case 2: return 'completed';
+        case 3: return 'cancelled';
+        default: return 'open';
+      }
+    } catch (e) {
+      console.error('Error checking order status:', e);
+      return 'open';
+    }
+  }, []);
 
   // =============================================================================
   // Create Buy Order (BSC - User locks BEP20 USDT to buy DEP20)
@@ -98,19 +219,19 @@ export function useP2PIntegration() {
       }
 
       // Step 2: Check if approval needed
-      if (createBuyOrder.needsApproval(amount)) {
+      if (createBuyOrderHook.needsApproval(amount)) {
         setTxState({ step: 'approving' });
         const amountWei = parseUnits(amount, 18);
-        await createBuyOrder.approve(amountWei);
+        await createBuyOrderHook.approve(amountWei);
         
         // Wait for approval
         await new Promise(resolve => setTimeout(resolve, 3000));
-        await createBuyOrder.refetchAllowance();
+        await createBuyOrderHook.refetchAllowance();
       }
 
       // Step 3: Create the buy order
       setTxState({ step: 'creating' });
-      await createBuyOrder.createBuyOrder(amount);
+      await createBuyOrderHook.createBuyOrder(amount);
 
       return true;
     } catch (error) {
@@ -119,14 +240,14 @@ export function useP2PIntegration() {
       if (errorMessage === 'APPROVAL_NEEDED') {
         setTxState({ step: 'approving' });
         const amountWei = parseUnits(amount, 18);
-        await createBuyOrder.approve(amountWei);
+        await createBuyOrderHook.approve(amountWei);
         return true;
       }
       
       setTxState({ step: 'error', error: errorMessage });
       return false;
     }
-  }, [isConnected, chainId, switchChain, createBuyOrder]);
+  }, [isConnected, chainId, switchChain, createBuyOrderHook]);
 
   // =============================================================================
   // Create Sell Order (DSC - User locks DEP20 to sell for BEP20 USDT)
@@ -197,18 +318,18 @@ export function useP2PIntegration() {
       }
 
       // Step 2: Check if approval needed
-      if (fillBscOrder.needsApproval(amount)) {
+      if (fillBscOrderHook.needsApproval(amount)) {
         setTxState({ step: 'approving' });
         const amountWei = parseUnits(amount, 18);
-        await fillBscOrder.approve(amountWei);
+        await fillBscOrderHook.approve(amountWei);
         
         await new Promise(resolve => setTimeout(resolve, 3000));
-        await fillBscOrder.refetchAllowance();
+        await fillBscOrderHook.refetchAllowance();
       }
 
       // Step 3: Fill the BSC order
       setTxState({ step: 'filling' });
-      await fillBscOrder.fillBscBuyOrder(bscOrderId, buyer, amount);
+      await fillBscOrderHook.fillBscBuyOrder(bscOrderId, buyer, amount);
 
       return true;
     } catch (error) {
@@ -217,14 +338,14 @@ export function useP2PIntegration() {
       if (errorMessage === 'APPROVAL_NEEDED') {
         setTxState({ step: 'approving' });
         const amountWei = parseUnits(amount, 18);
-        await fillBscOrder.approve(amountWei);
+        await fillBscOrderHook.approve(amountWei);
         return true;
       }
       
       setTxState({ step: 'error', error: errorMessage });
       return false;
     }
-  }, [isConnected, chainId, switchChain, fillBscOrder]);
+  }, [isConnected, chainId, switchChain, fillBscOrderHook]);
 
   // =============================================================================
   // Cancel Order
@@ -276,6 +397,7 @@ export function useP2PIntegration() {
       orderId,
       chainId: BSC_CHAIN_ID,
       userAddress: `${buyers[i].slice(0, 6)}...${buyers[i].slice(-4)}`,
+      fullAddress: buyers[i], // Full address for contract calls
       amount: formatUnits(amounts[i], 18),
       amountWei: amounts[i],
       timestamp: Date.now() - Math.random() * 86400000, // Placeholder
@@ -296,6 +418,7 @@ export function useP2PIntegration() {
       orderId,
       chainId: DSC_CHAIN_ID,
       userAddress: `${sellers[i].slice(0, 6)}...${sellers[i].slice(-4)}`,
+      fullAddress: sellers[i], // Full address for contract calls
       amount: formatUnits(amounts[i], 18),
       amountWei: amounts[i],
       timestamp: Date.now() - Math.random() * 86400000, // Placeholder
@@ -319,14 +442,14 @@ export function useP2PIntegration() {
 
   // Watch create buy order progress
   useEffect(() => {
-    if (createBuyOrder.isSuccess) {
-      setTxState({ step: 'complete', txHash: createBuyOrder.hash, orderId: createBuyOrder.orderId ?? undefined });
+    if (createBuyOrderHook.isSuccess) {
+      setTxState({ step: 'complete', txHash: createBuyOrderHook.hash, orderId: createBuyOrderHook.orderId ?? undefined });
       bscOrders.refetch();
     }
-    if (createBuyOrder.error) {
-      setTxState({ step: 'error', error: createBuyOrder.error.message });
+    if (createBuyOrderHook.error) {
+      setTxState({ step: 'error', error: createBuyOrderHook.error.message });
     }
-  }, [createBuyOrder.isSuccess, createBuyOrder.error, createBuyOrder.hash, createBuyOrder.orderId]);
+  }, [createBuyOrderHook.isSuccess, createBuyOrderHook.error, createBuyOrderHook.hash, createBuyOrderHook.orderId]);
 
   // Watch create sell order progress
   useEffect(() => {
@@ -341,15 +464,15 @@ export function useP2PIntegration() {
 
   // Watch fill order progress
   useEffect(() => {
-    if (fillBscOrder.isSuccess) {
-      setTxState({ step: 'settling', txHash: fillBscOrder.hash, orderId: fillBscOrder.dscOrderId ?? undefined });
+    if (fillBscOrderHook.isSuccess) {
+      setTxState({ step: 'settling', txHash: fillBscOrderHook.hash, orderId: fillBscOrderHook.dscOrderId ?? undefined });
       // Trigger settlement notification
       // This would be handled by the bridge relayer in production
     }
-    if (fillBscOrder.error) {
-      setTxState({ step: 'error', error: fillBscOrder.error.message });
+    if (fillBscOrderHook.error) {
+      setTxState({ step: 'error', error: fillBscOrderHook.error.message });
     }
-  }, [fillBscOrder.isSuccess, fillBscOrder.error, fillBscOrder.hash, fillBscOrder.dscOrderId]);
+  }, [fillBscOrderHook.isSuccess, fillBscOrderHook.error, fillBscOrderHook.hash, fillBscOrderHook.dscOrderId]);
 
   return {
     // State
@@ -358,12 +481,20 @@ export function useP2PIntegration() {
     chainId,
     address,
     
-    // Actions
+    // Actions (legacy combined functions)
     handleCreateBuyOrder,
     handleCreateSellOrder,
     handleFillBscOrder,
     handleCancelOrder,
     resetTxState,
+    
+    // NEW: Step-by-step functions for modal
+    switchToChain,
+    approveToken,
+    fillBscOrder,
+    createBuyOrder,
+    waitForTransaction,
+    checkOrderStatus,
     
     // Orders
     allOrders,
@@ -382,8 +513,8 @@ export function useP2PIntegration() {
     },
     
     // Transaction pending states
-    isPending: createBuyOrder.isPending || createSellOrder.isPending || fillBscOrder.isPending,
-    isConfirming: createBuyOrder.isConfirming || createSellOrder.isConfirming || fillBscOrder.isConfirming,
+    isPending: createBuyOrderHook.isPending || createSellOrder.isPending || fillBscOrderHook.isPending,
+    isConfirming: createBuyOrderHook.isConfirming || createSellOrder.isConfirming || fillBscOrderHook.isConfirming,
     
     // Chain helpers
     isOnBsc: chainId === BSC_CHAIN_ID,
@@ -392,7 +523,7 @@ export function useP2PIntegration() {
     switchToDsc: () => switchChain({ chainId: DSC_CHAIN_ID }),
     
     // Balances (for display)
-    bscBalance: createBuyOrder.balance ? formatUnits(createBuyOrder.balance, 18) : '0',
+    bscBalance: createBuyOrderHook.balance ? formatUnits(createBuyOrderHook.balance, 18) : '0',
     dscBalance: createSellOrder.balance ? formatUnits(createSellOrder.balance, 18) : '0',
   };
 }

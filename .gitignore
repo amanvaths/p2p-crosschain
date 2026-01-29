@@ -1,49 +1,24 @@
-# Dependencies
-node_modules
-.pnpm-store
-
-# Build outputs
-dist
-.next
-out
-build
-
-# Environment
+# ENV / secrets
 .env
-.env.local
-.env.*.local
+.env.*
+*.key
 
-# IDE
-.idea
-.vscode
-*.swp
-*.swo
+# node
+node_modules/
+.pnpm-store/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
+# logs
 *.log
-npm-debug.log*
-pnpm-debug.log*
 
-# Testing
-coverage
+# debug / test scripts (DO NOT PUSH)
+apps/web/*.mjs
+packages/contracts/*.mjs
 
-# Turbo
-.turbo
+# public build artifacts
+apps/web/public/
+dist/
+.next/
 
-# Foundry
-packages/contracts/cache
-packages/contracts/out
-packages/contracts/broadcast
-
-# Prisma
-apps/web/prisma/*.db
-apps/web/prisma/*.db-journal
-
-# Misc
-*.tsbuildinfo
-
-.env
+# relayer private infra
+apps/relayer/.env
+apps/relayer/node_modules

@@ -10,10 +10,11 @@
     "lint": "eslint src/"
   },
   "dependencies": {
+    "@p2p/shared": "workspace:*",
     "@prisma/client": "^5.10.0",
+    "dotenv": "^17.2.3",
     "ioredis": "^5.3.2",
-    "viem": "^2.7.0",
-    "@p2p/shared": "workspace:*"
+    "viem": "^2.7.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
@@ -22,4 +23,3 @@
     "typescript": "^5.3.0"
   }
 }
-

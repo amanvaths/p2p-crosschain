@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import dynamic from 'next/dynamic';
-import { Header } from '@/components/Header';
 import './globals.css';
 
 const inter = Inter({
@@ -14,9 +13,14 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
 });
 
-// Dynamically import Web3Provider to avoid SSR issues with localStorage
+// Dynamically import Web3Provider and Header to avoid SSR issues with WalletConnect/wagmi
 const Web3Provider = dynamic(
   () => import('@/providers/Web3Provider').then((mod) => mod.Web3Provider),
+  { ssr: false }
+);
+
+const Header = dynamic(
+  () => import('@/components/Header').then((mod) => mod.Header),
   { ssr: false }
 );
 

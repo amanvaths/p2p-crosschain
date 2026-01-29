@@ -6,7 +6,7 @@
       "rpcUrl": "https://bsc-dataseed1.binance.org",
       "explorerUrl": "https://bscscan.com",
       "contracts": {
-        "vault": "0x0000000000000000000000000000000000000000",
+        "vault": "0x7e891720D77546Ef159ef72871EbaAe3896fcc23",
         "usdt": "0x55d398326f99059fF775485246999027B3197955"
       }
     },
@@ -16,13 +16,13 @@
       "rpcUrl": "https://rpc01.dscscan.io/",
       "explorerUrl": "https://dscscan.io",
       "contracts": {
-        "vault": "0x0000000000000000000000000000000000000000",
+        "vault": "0xb4e3Ce07DD861dC10da09Ef7574A07b73470D99d",
         "usdt": "0xbc27aCEac6865dE31a286Cd9057564393D5251CB"
       }
     }
   },
-  "bridgeRelayer": "0x0000000000000000000000000000000000000000",
-  "deployedAt": "",
-  "lastUpdated": ""
+  "bridgeRelayer": "0x68Fa693027D6037220A973D0EEe80ecdefbECa82",
+  "deployedAt": "2026-01-23",
+  "lastUpdated": "2026-01-28"
 }
 

@@ -29,28 +29,24 @@ import {
 // Types
 // =============================================================================
 
+// V2 BscOrder - updated for new contract
 export interface BscOrder {
   buyer: Address;
   status: OrderStatus;
+  orderType: number;
   amount: bigint;
-  createdAt: bigint;
+  filledAmount: bigint;
   expiresAt: bigint;
-  matchedSeller: Address;
-  matchedAt: bigint;
-  dscTxHash: Hash;
 }
 
+// V2 DscOrder - updated for new contract
 export interface DscOrder {
   seller: Address;
   status: OrderStatus;
   orderType: number;
   amount: bigint;
-  createdAt: bigint;
+  filledAmount: bigint;
   expiresAt: bigint;
-  matchedBuyer: Address;
-  matchedBscOrderId: bigint;
-  matchedAt: bigint;
-  bscTxHash: Hash;
 }
 
 // =============================================================================
@@ -202,7 +198,7 @@ export function useCancelBscOrder() {
 }
 
 /**
- * Hook to read BSC orders
+ * Hook to read BSC orders (V2)
  */
 export function useBscOrder(orderId: bigint | undefined) {
   const vaultAddress = getContractAddress(BSC_CHAIN_ID, 'vault');
@@ -216,22 +212,21 @@ export function useBscOrder(orderId: bigint | undefined) {
     query: { enabled: orderId !== undefined },
   });
 
+  // V2 getOrder returns: user, status, orderType, amount, filledAmount, expiresAt
   const order: BscOrder | null = data ? {
     buyer: data[0],
     status: data[1] as OrderStatus,
-    amount: data[2],
-    createdAt: data[3],
-    expiresAt: data[4],
-    matchedSeller: data[5],
-    matchedAt: data[6],
-    dscTxHash: data[7],
+    orderType: data[2],
+    amount: data[3],
+    filledAmount: data[4],
+    expiresAt: data[5],
   } : null;
 
   return { order, isLoading, error, refetch };
 }
 
 /**
- * Hook to get open buy orders on BSC
+ * Hook to get open buy orders on BSC (V2 - includes remainingAmounts)
  */
 export function useBscOpenOrders(offset: bigint = 0n, limit: bigint = 50n) {
   const vaultAddress = getContractAddress(BSC_CHAIN_ID, 'vault');
@@ -244,11 +239,13 @@ export function useBscOpenOrders(offset: bigint = 0n, limit: bigint = 50n) {
     chainId: BSC_CHAIN_ID,
   });
 
+  // V2 returns: orderIds, users, amounts, remainingAmounts, expiresAts
   const orders = data ? {
     orderIds: data[0],
-    buyers: data[1],
+    buyers: data[1], // Keep as 'buyers' for backward compatibility
     amounts: data[2],
-    expiresAts: data[3],
+    remainingAmounts: data[3],
+    expiresAts: data[4],
   } : null;
 
   return { orders, isLoading, error, refetch };
@@ -268,6 +265,153 @@ export function useUserBscOrders(userAddress: Address | undefined) {
     chainId: BSC_CHAIN_ID,
     query: { enabled: !!userAddress },
   });
+}
+
+/**
+ * Hook to get user's DSC orders
+ */
+export function useUserDscOrders(userAddress: Address | undefined) {
+  const vaultAddress = getContractAddress(DSC_CHAIN_ID, 'vault');
+
+  return useReadContract({
+    address: vaultAddress,
+    abi: P2PVaultDSCABI,
+    functionName: 'getUserOrderIds',
+    args: userAddress ? [userAddress] : undefined,
+    chainId: DSC_CHAIN_ID,
+    query: { enabled: !!userAddress },
+  });
+}
+
+// Status enum values matching contract
+const STATUS_MAP: Record<number, string> = {
+  0: 'NONE',
+  1: 'OPEN',
+  2: 'PARTIALLY_FILLED',
+  3: 'COMPLETED',
+  4: 'CANCELLED',
+};
+
+export interface UserOrderWithStatus {
+  orderId: bigint;
+  chainId: number;
+  type: 'buy' | 'sell';
+  user: Address;
+  status: string;
+  amount: bigint;
+  filledAmount: bigint;
+  expiresAt: bigint;
+}
+
+/**
+ * Hook to get ALL user orders with their status (for My Orders tab)
+ */
+export function useAllUserOrders(userAddress: Address | undefined) {
+  const [orders, setOrders] = useState<UserOrderWithStatus[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  
+  const bscVault = getContractAddress(BSC_CHAIN_ID, 'vault');
+  const dscVault = getContractAddress(DSC_CHAIN_ID, 'vault');
+  
+  const bscClient = usePublicClient({ chainId: BSC_CHAIN_ID });
+  const dscClient = usePublicClient({ chainId: DSC_CHAIN_ID });
+  
+  const fetchOrders = useCallback(async () => {
+    if (!userAddress || !bscClient || !dscClient) {
+      setOrders([]);
+      return;
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const allOrders: UserOrderWithStatus[] = [];
+      
+      // Fetch BSC order IDs
+      const bscOrderIds = await bscClient.readContract({
+        address: bscVault,
+        abi: P2PVaultBSCABI,
+        functionName: 'getUserOrderIds',
+        args: [userAddress],
+      }) as bigint[];
+      
+      // Fetch each BSC order details
+      for (const orderId of bscOrderIds) {
+        try {
+          const orderData = await bscClient.readContract({
+            address: bscVault,
+            abi: P2PVaultBSCABI,
+            functionName: 'getOrder',
+            args: [orderId],
+          }) as [Address, number, number, bigint, bigint, bigint];
+          
+          allOrders.push({
+            orderId,
+            chainId: BSC_CHAIN_ID,
+            type: 'buy',
+            user: orderData[0],
+            status: STATUS_MAP[orderData[1]] || 'UNKNOWN',
+            amount: orderData[3],
+            filledAmount: orderData[4],
+            expiresAt: orderData[5],
+          });
+        } catch (e) {
+          console.error(`Error fetching BSC order ${orderId}:`, e);
+        }
+      }
+      
+      // Fetch DSC order IDs
+      const dscOrderIds = await dscClient.readContract({
+        address: dscVault,
+        abi: P2PVaultDSCABI,
+        functionName: 'getUserOrderIds',
+        args: [userAddress],
+      }) as bigint[];
+      
+      // Fetch each DSC order details
+      for (const orderId of dscOrderIds) {
+        try {
+          const orderData = await dscClient.readContract({
+            address: dscVault,
+            abi: P2PVaultDSCABI,
+            functionName: 'getOrder',
+            args: [orderId],
+          }) as [Address, number, number, bigint, bigint, bigint];
+          
+          allOrders.push({
+            orderId,
+            chainId: DSC_CHAIN_ID,
+            type: 'sell',
+            user: orderData[0],
+            status: STATUS_MAP[orderData[1]] || 'UNKNOWN',
+            amount: orderData[3],
+            filledAmount: orderData[4],
+            expiresAt: orderData[5],
+          });
+        } catch (e) {
+          console.error(`Error fetching DSC order ${orderId}:`, e);
+        }
+      }
+      
+      // Sort by orderId descending (newest first)
+      allOrders.sort((a, b) => Number(b.orderId) - Number(a.orderId));
+      
+      setOrders(allOrders);
+    } catch (e) {
+      console.error('Error fetching user orders:', e);
+      setError(e instanceof Error ? e : new Error('Unknown error'));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userAddress, bscClient, dscClient, bscVault, dscVault]);
+  
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+  
+  return { orders, isLoading, error, refetch: fetchOrders };
 }
 
 // =============================================================================
@@ -471,7 +615,7 @@ export function useCreateSellOrder() {
 }
 
 /**
- * Hook to cancel a sell order on DSC
+ * Hook to cancel a sell order on DSC (V2 - uses cancelOrder)
  */
 export function useCancelDscOrder() {
   const chainId = useChainId();
@@ -488,10 +632,11 @@ export function useCancelDscOrder() {
       return;
     }
 
+    // V2 uses cancelOrder (not cancelSellOrder)
     writeContract({
       address: vaultAddress,
       abi: P2PVaultDSCABI,
-      functionName: 'cancelSellOrder',
+      functionName: 'cancelOrder',
       args: [orderId],
     });
   }, [chainId, switchChain, writeContract, vaultAddress]);
@@ -508,7 +653,7 @@ export function useCancelDscOrder() {
 }
 
 /**
- * Hook to read DSC orders
+ * Hook to read DSC orders (V2)
  */
 export function useDscOrder(orderId: bigint | undefined) {
   const vaultAddress = getContractAddress(DSC_CHAIN_ID, 'vault');
@@ -522,27 +667,26 @@ export function useDscOrder(orderId: bigint | undefined) {
     query: { enabled: orderId !== undefined },
   });
 
+  // V2 getOrder returns: user, status, orderType, amount, filledAmount, expiresAt
   const order: DscOrder | null = data ? {
     seller: data[0],
     status: data[1] as OrderStatus,
     orderType: data[2],
     amount: data[3],
-    createdAt: data[4],
+    filledAmount: data[4],
     expiresAt: data[5],
-    matchedBuyer: data[6],
-    matchedBscOrderId: data[7],
-    matchedAt: data[8],
-    bscTxHash: data[9],
   } : null;
 
   return { order, isLoading, error, refetch };
 }
 
 /**
- * Hook to get open sell orders on DSC
+ * Hook to get open sell orders on DSC (V2 - includes remainingAmounts)
  */
 export function useDscOpenOrders(offset: bigint = 0n, limit: bigint = 50n) {
   const vaultAddress = getContractAddress(DSC_CHAIN_ID, 'vault');
+  
+  console.log('useDscOpenOrders - DSC Vault V2:', vaultAddress);
 
   const { data, isLoading, error, refetch } = useReadContract({
     address: vaultAddress,
@@ -552,26 +696,28 @@ export function useDscOpenOrders(offset: bigint = 0n, limit: bigint = 50n) {
     chainId: DSC_CHAIN_ID,
   });
 
+  // V2 returns: orderIds, users, amounts, remainingAmounts, expiresAts
   const orders = data ? {
     orderIds: data[0],
-    sellers: data[1],
+    sellers: data[1], // Keep as 'sellers' for backward compatibility
     amounts: data[2],
-    expiresAts: data[3],
+    remainingAmounts: data[3],
+    expiresAts: data[4],
   } : null;
 
   return { orders, isLoading, error, refetch };
 }
 
 /**
- * Hook to check if BSC order is already matched on DSC
+ * Hook to get DSC order ID for a BSC order (V2)
  */
-export function useIsBscOrderMatched(bscOrderId: bigint | undefined) {
+export function useGetDscOrderForBscOrder(bscOrderId: bigint | undefined) {
   const vaultAddress = getContractAddress(DSC_CHAIN_ID, 'vault');
 
   return useReadContract({
     address: vaultAddress,
     abi: P2PVaultDSCABI,
-    functionName: 'isBscOrderMatched',
+    functionName: 'getDscOrderForBscOrder',
     args: bscOrderId !== undefined ? [bscOrderId] : undefined,
     chainId: DSC_CHAIN_ID,
     query: { enabled: bscOrderId !== undefined },

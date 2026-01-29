@@ -21,11 +21,14 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const where: any = {};
 
-    if (status) {
-      where.status = status;
-    } else {
-      where.status = 'OPEN'; // Default to open orders
+    if (status && status.toLowerCase() !== 'all') {
+      // Convert to uppercase for Prisma enum
+      where.status = status.toUpperCase();
+    } else if (!status) {
+      // Default to open orders when no status specified
+      where.status = 'OPEN';
     }
+    // When status is 'all', don't add status filter (show all statuses)
 
     if (maker) {
       where.maker = maker.toLowerCase();
@@ -59,8 +62,22 @@ export async function GET(request: NextRequest) {
       prisma.order.count({ where }),
     ]);
 
+    // Serialize BigInt values to strings for JSON
+    const serializedOrders = orders.map((order) => ({
+      ...order,
+      orderId: order.orderId.toString(),
+      makerTimelock: order.makerTimelock.toString(),
+      takerTimelock: order.takerTimelock.toString(),
+      blockNumber: order.blockNumber.toString(),
+      escrows: order.escrows?.map((escrow) => ({
+        ...escrow,
+        timelock: escrow.timelock.toString(),
+        blockNumber: escrow.blockNumber.toString(),
+      })),
+    }));
+
     return NextResponse.json({
-      orders,
+      orders: serializedOrders,
       total,
       limit,
       offset,

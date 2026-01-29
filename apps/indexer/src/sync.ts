@@ -3,12 +3,14 @@
 // =============================================================================
 
 import type { Address, Log } from 'viem';
-import { P2POrderbookABI, P2PEscrowHTLCABI } from '@p2p/shared/abis';
 import prisma from './db.js';
 import { config, type ChainConfig } from './config.js';
 import { getChainClient } from './chains.js';
-import { processOrderbookEvent } from './processors/orderbook.js';
-import { processEscrowEvent } from './processors/escrow.js';
+import { processBscVaultEvent, processDscVaultEvent } from './processors/vault.js';
+
+// Chain IDs
+const BSC_CHAIN_ID = 56;
+const DSC_CHAIN_ID = 1555;
 
 // Track if sync is in progress
 const syncInProgress = new Map<number, boolean>();
@@ -58,24 +60,20 @@ export async function syncChain(chainConfig: ChainConfig): Promise<void> {
         `${name}: Syncing blocks ${fromBlock} to ${toBlock} (current: ${currentBlock})`
       );
 
-      // Fetch logs for both contracts
-      const [orderbookLogs, escrowLogs] = await Promise.all([
-        fetchContractLogs(client, orderbookAddress, fromBlock, toBlock),
-        fetchContractLogs(client, escrowAddress, fromBlock, toBlock),
-      ]);
+      // Fetch logs for vault contract (orderbookAddress now points to vault)
+      const vaultLogs = await fetchContractLogs(client, orderbookAddress, fromBlock, toBlock);
 
       console.log(
-        `${name}: Found ${orderbookLogs.length} orderbook logs, ${escrowLogs.length} escrow logs`
+        `${name}: Found ${vaultLogs.length} vault logs in blocks ${fromBlock}-${toBlock}`
       );
 
-      // Process orderbook events
-      for (const log of orderbookLogs) {
-        await processOrderbookEvent(chainId, orderbookAddress, log);
-      }
-
-      // Process escrow events
-      for (const log of escrowLogs) {
-        await processEscrowEvent(chainId, escrowAddress, log);
+      // Process vault events based on chain
+      for (const log of vaultLogs) {
+        if (chainId === BSC_CHAIN_ID) {
+          await processBscVaultEvent(chainId, orderbookAddress, log);
+        } else if (chainId === DSC_CHAIN_ID) {
+          await processDscVaultEvent(chainId, orderbookAddress, log);
+        }
       }
 
       // Update indexer state

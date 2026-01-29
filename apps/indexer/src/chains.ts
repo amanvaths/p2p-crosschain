@@ -3,10 +3,34 @@
 // =============================================================================
 
 import { createPublicClient, http, type PublicClient, type Chain } from 'viem';
-import { sepolia, baseSepolia } from 'viem/chains';
+import { bsc, sepolia, baseSepolia } from 'viem/chains';
 import { config, type ChainConfig } from './config.js';
 
+// Custom DSC Chain definition
+const dscChain: Chain = {
+  id: 1555,
+  name: 'DSC Chain',
+  nativeCurrency: {
+    name: 'DSC',
+    symbol: 'DSC',
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ['https://rpc01.dscscan.io/'],
+    },
+  },
+  blockExplorers: {
+    default: {
+      name: 'DSCScan',
+      url: 'https://dscscan.io',
+    },
+  },
+};
+
 const chainById: Record<number, Chain> = {
+  56: bsc,
+  1555: dscChain,
   11155111: sepolia,
   84532: baseSepolia,
 };

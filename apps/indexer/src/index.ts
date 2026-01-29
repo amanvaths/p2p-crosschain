@@ -2,6 +2,7 @@
 // P2P Exchange Indexer - Main Entry Point
 // =============================================================================
 
+import 'dotenv/config';
 import { config } from './config.js';
 import prisma from './db.js';
 import { initializeChainClients } from './chains.js';

@@ -18,6 +18,8 @@ export interface Order {
   sellAmount: string;
   buyToken: string;
   buyAmount: string;
+  srcChainId: number;
+  dstChainId: number;
   status: string;
   createdAt: string;
   updatedAt: string;
