@@ -14,10 +14,14 @@ node_modules/
 apps/web/*.mjs
 packages/contracts/*.mjs
 
-# public build artifacts
-apps/web/public/
+# build artifacts
 dist/
 .next/
+
+# Allow public folder but ignore generated files
+!apps/web/public/
+apps/web/public/*.js
+apps/web/public/*.map
 
 # relayer private infra
 apps/relayer/.env
