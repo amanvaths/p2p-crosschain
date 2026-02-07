@@ -11,7 +11,7 @@ import { useConnectModal } from '@rainbow-me/rainbowkit';
 import { formatUnits, parseUnits } from 'viem';
 import { useP2PIntegration, type UIOrder } from '@/hooks/useP2PIntegration';
 import { useDbOrders, useDbStats, type Order, type Stats } from '@/hooks/useDatabase';
-import { useCancelBscOrder, useCancelDscOrder, useAllUserOrders, type UserOrderWithStatus } from '@/hooks/useP2PVault';
+import { useCancelBscOrder, useCancelDscOrder } from '@/hooks/useP2PVault';
 import { getContractAddress, BSC_CHAIN_ID, DSC_CHAIN_ID } from '@/lib/contracts';
 
 // =============================================================================
@@ -1593,47 +1593,55 @@ export default function HomePage() {
   // Real Data Hooks - Fetch from blockchain and database
   // =============================================================================
   
-  // P2P Integration - Smart contract interactions
+  // P2P Integration - Smart contract interactions (only for creating orders, not reading)
   const p2p = useP2PIntegration();
-  
-  // Fetch ALL user orders for My Orders tab (includes completed/cancelled)
-  const { orders: userOrders, isLoading: isLoadingUserOrders, refetch: refetchUserOrders } = useAllUserOrders(address as `0x${string}` | undefined);
   
   // Database hooks for stats
   const { stats, loading: loadingStats } = useDbStats();
   
-  // Use BLOCKCHAIN orders directly from smart contract (real-time)
-  // p2p.allOrders comes from useP2PIntegration which reads directly from blockchain
-  const blockchainOrders = p2p.allOrders || [];
+  // Fetch ALL orders from database (not just OPEN - includes all statuses)
+  // Include OPEN and MATCHED/MAKER_LOCKED/TAKER_LOCKED orders for buy/sell display
+  const { orders: dbOrders, loading: loadingDbOrders, refetch: refetchDbOrders, totalLocked: dbTotalLocked } = useDbOrders({
+    limit: 200, // Get more orders
+    status: 'all', // Get all statuses, we'll filter for locked ones
+  });
   
-  // Map blockchain orders to display format (for public order book)
-  const publicOrders = blockchainOrders.map((order, index) => ({
-    id: index,
-    userAddress: order.userAddress || 'Unknown',
-    fullAddress: order.fullAddress || '', // Full address for contract calls
-    status: 'OPEN',
-    amount: order.amount,
-    timestamp: order.timestamp || Date.now(),
-    type: order.type as 'buy' | 'sell',
+  // Fetch user's orders from database
+  const { orders: userDbOrders, loading: loadingUserDbOrders, refetch: refetchUserDbOrders } = useDbOrders(
+    address ? {
+      maker: address,
+      limit: 200,
+    } : undefined
+  );
+  
+  // Map database orders to display format (for public order book)
+  const publicOrders = (dbOrders || []).map((order: any, index: number) => ({
+    id: `db-${index}`,
+    userAddress: `${order.maker?.slice(0, 6)}...${order.maker?.slice(-4)}` || 'Unknown',
+    fullAddress: order.maker || '',
+    status: order.status || 'OPEN',
+    amount: formatUnits(BigInt(order.sellAmount || '0'), 18),
+    timestamp: order.createdAt ? new Date(order.createdAt).getTime() : Date.now(),
+    type: order.srcChainId === BSC_CHAIN_ID ? 'buy' : 'sell', // BSC orders are buy orders
     price: '1.0000',
-    orderId: order.orderId,
-    dbId: undefined,
-    chainId: order.chainId || (order.type === 'buy' ? BSC_CHAIN_ID : DSC_CHAIN_ID),
+    orderId: BigInt(order.orderId || '0'),
+    dbId: order.id,
+    chainId: order.srcChainId || (order.srcChainId === BSC_CHAIN_ID ? BSC_CHAIN_ID : DSC_CHAIN_ID),
   }));
   
-  // Map user orders to display format (for My Orders tab)
-  const myOrders = userOrders.map((order, index) => ({
-    id: index,
-    userAddress: `${order.user.slice(0, 6)}...${order.user.slice(-4)}`,
-    fullAddress: order.user,
-    status: order.status,
-    amount: formatUnits(order.amount, 18),
-    timestamp: Date.now() - (userOrders.length - index) * 3600000, // Placeholder ordering
-    type: order.type,
+  // Map user orders from database to display format (for My Orders tab)
+  const myOrders = (userDbOrders || []).map((order: any, index: number) => ({
+    id: `user-${index}`,
+    userAddress: `${order.maker?.slice(0, 6)}...${order.maker?.slice(-4)}` || 'Unknown',
+    fullAddress: order.maker || '',
+    status: order.status || 'OPEN',
+    amount: formatUnits(BigInt(order.sellAmount || '0'), 18),
+    timestamp: order.createdAt ? new Date(order.createdAt).getTime() : Date.now(),
+    type: order.srcChainId === BSC_CHAIN_ID ? 'buy' : 'sell',
     price: '1.0000',
-    orderId: order.orderId,
-    dbId: undefined,
-    chainId: order.chainId,
+    orderId: BigInt(order.orderId || '0'),
+    dbId: order.id,
+    chainId: order.srcChainId || (order.srcChainId === BSC_CHAIN_ID ? BSC_CHAIN_ID : DSC_CHAIN_ID),
   }));
   
   // Filter My Orders based on status and type dropdown
@@ -1653,13 +1661,65 @@ export default function HomePage() {
   });
   
   // Display orders based on current view
+  // For public orders, show OPEN and MATCHED/MAKER_LOCKED/TAKER_LOCKED (locked orders)
   const displayedOrders = showMyOrders 
     ? filteredMyOrders
-    : publicOrders.filter(order => order.type === activeTab);
+    : publicOrders.filter(order => {
+        if (order.type !== activeTab) return false;
+        // Show OPEN and locked orders (MATCHED/MAKER_LOCKED/TAKER_LOCKED)
+        return order.status === 'OPEN' || 
+               order.status === 'MAKER_LOCKED' || 
+               order.status === 'TAKER_LOCKED' ||
+               order.status === 'MATCHED';
+      });
   
-  const totalOrders = showMyOrders ? userOrders.length : publicOrders.length;
-  const hasMoreOrders = false; // Blockchain fetches all at once
-  const isLoadingMore = p2p.isLoadingBscOrders || p2p.isLoadingDscOrders || isLoadingUserOrders;
+  // Fetch actual locked amount from contract for the active chain
+  const [chainLockedAmount, setChainLockedAmount] = useState<number>(0);
+  const [loadingLockedAmount, setLoadingLockedAmount] = useState(false);
+  
+  useEffect(() => {
+    const fetchLockedAmount = async () => {
+      if (showMyOrders) return; // Don't fetch for My Orders tab
+      
+      const activeChainId = activeTab === 'buy' ? BSC_CHAIN_ID : DSC_CHAIN_ID;
+      setLoadingLockedAmount(true);
+      try {
+        const response = await fetch(`/api/p2p/locked-amount?chainId=${activeChainId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setChainLockedAmount(parseFloat(data.totalLocked || '0'));
+        }
+      } catch (error) {
+        console.error('Error fetching locked amount:', error);
+      } finally {
+        setLoadingLockedAmount(false);
+      }
+    };
+    
+    fetchLockedAmount();
+    // Refetch every 10 seconds
+    const interval = setInterval(fetchLockedAmount, 10000);
+    return () => clearInterval(interval);
+  }, [activeTab, showMyOrders]);
+  
+  // Use contract locked amount if available, otherwise calculate from displayed orders
+  const displayedTotalLocked = showMyOrders 
+    ? displayedOrders.reduce((sum, order) => {
+        if (order.status === 'OPEN' || order.status === 'MAKER_LOCKED' || order.status === 'TAKER_LOCKED') {
+          return sum + parseFloat(order.amount);
+        }
+        return sum;
+      }, 0)
+    : chainLockedAmount || displayedOrders.reduce((sum, order) => {
+        if (order.status === 'OPEN' || order.status === 'MAKER_LOCKED' || order.status === 'TAKER_LOCKED') {
+          return sum + parseFloat(order.amount);
+        }
+        return sum;
+      }, 0);
+  
+  const totalOrders = showMyOrders ? (userDbOrders?.length || 0) : displayedOrders.length;
+  const hasMoreOrders = false; // Database fetches all at once
+  const isLoadingMore = loadingDbOrders || loadingUserDbOrders;
   
   // Trade confirmation modal state
   const [selectedOrder, setSelectedOrder] = useState<{
@@ -1692,8 +1752,8 @@ export default function HomePage() {
 
   // Called after successful cancel
   const handleCancelSuccess = () => {
-    refetchUserOrders();
-    p2p.refetchOrders();
+    refetchDbOrders();
+    refetchUserDbOrders();
   };
 
   // Handle create order - calls smart contract
@@ -1705,8 +1765,8 @@ export default function HomePage() {
         await p2p.handleCreateSellOrder(amount);
       }
       // Refetch orders after creation
-      refetchUserOrders();
-      p2p.refetchOrders();
+      refetchDbOrders();
+      refetchUserDbOrders();
     } catch (error) {
       console.error('Error creating order:', error);
       throw error;
@@ -1715,13 +1775,13 @@ export default function HomePage() {
 
   // Load more orders (pagination)
   const loadMoreOrders = useCallback(() => {
-    // Refetch orders
+    // Refetch orders from database
     if (showMyOrders) {
-      refetchUserOrders();
+      refetchUserDbOrders();
     } else {
-      p2p.refetchOrders();
+      refetchDbOrders();
     }
-  }, [showMyOrders, refetchUserOrders, p2p]);
+  }, [showMyOrders, refetchUserDbOrders, refetchDbOrders]);
 
   // Infinite scroll handler
   useEffect(() => {
@@ -1749,8 +1809,8 @@ export default function HomePage() {
         isOpen={isCreateModalOpen} 
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={() => {
-          refetchUserOrders();
-          p2p.refetchOrders();
+          refetchDbOrders();
+          refetchUserDbOrders();
         }}
       />
       
@@ -1764,8 +1824,8 @@ export default function HomePage() {
         order={selectedOrder}
         tradeType={activeTab === 'buy' ? 'sell' : 'buy'}
         onTradeSuccess={() => {
-          refetchUserOrders();
-          p2p.refetchOrders();
+          refetchDbOrders();
+          refetchUserDbOrders();
         }}
       />
 
@@ -1794,7 +1854,7 @@ export default function HomePage() {
 
       {/* Main Content */}
       <div className="max-w-[92rem] mx-auto px-4 py-6">
-        {/* Top Row: Create Button + My Orders + Filters + Tabs */}
+        {/* Top Row: Create Button + My Orders + Trade History + Filters + Tabs */}
         <div className="flex flex-wrap items-center gap-3 mb-4">
           {/* Create Button */}
           <button
@@ -1820,6 +1880,16 @@ export default function HomePage() {
             }`}
           >
             📋 My Orders
+          </button>
+
+          {/* Trade History Button */}
+          <button
+            onClick={() => {
+              window.location.href = '/trade-history';
+            }}
+            className="px-4 py-3 rounded-xl font-medium transition-all duration-200 bg-surface text-muted hover:bg-surface-light border border-white/10"
+          >
+            📊 Trade History
           </button>
 
           {/* Amount Range Filter */}
@@ -1900,7 +1970,16 @@ export default function HomePage() {
           </div>
           <div className="bg-surface rounded-xl p-3 border border-white/5 text-center">
             <div className="text-xl font-bold text-primary">
-              {loadingStats ? '...' : `$${((platformStats?.totalVolume ? parseFloat(platformStats.totalVolume) : 0) / 1000).toFixed(1)}K`}
+              {loadingStats ? '...' : (() => {
+                const volume = platformStats?.totalVolume ? parseFloat(platformStats.totalVolume) : 0;
+                if (volume >= 1000000) {
+                  return `$${(volume / 1000000).toFixed(2)}M`;
+                } else if (volume >= 1000) {
+                  return `$${(volume / 1000).toFixed(2)}K`;
+                } else {
+                  return `$${volume.toFixed(2)}`;
+                }
+              })()}
             </div>
             <div className="text-xs text-muted">Total Volume</div>
           </div>
@@ -1955,6 +2034,11 @@ export default function HomePage() {
             <div className="flex items-center gap-4">
               <span className="text-sm text-muted">
                 {`Showing ${displayedOrders.length} of ${totalOrders} orders`}
+                {!showMyOrders && displayedTotalLocked > 0 && (
+                  <span className="ml-2 text-primary font-semibold">
+                    (${displayedTotalLocked.toFixed(2)} USDT locked)
+                  </span>
+                )}
               </span>
               {/* Status Filter - Only show when My Orders is active */}
               {showMyOrders && (

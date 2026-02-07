@@ -29,8 +29,26 @@ export async function GET(request: NextRequest) {
         }),
       ]);
 
+      // Calculate user volume (convert from wei to USDT if stored in wei)
+      let userVolumeUSDT = '0';
+      if (user?.totalVolume) {
+        // Check if it's already in USDT format (has decimal) or in wei
+        const volumeStr = user.totalVolume;
+        if (volumeStr.includes('.') || parseFloat(volumeStr) < 1e15) {
+          // Already in USDT format
+          userVolumeUSDT = volumeStr;
+        } else {
+          // In wei format, convert to USDT
+          const volumeWei = BigInt(volumeStr);
+          userVolumeUSDT = (Number(volumeWei) / 1e18).toString();
+        }
+      }
+      
       return NextResponse.json({
-        user: user || { address, ordersCreated: 0, ordersCompleted: 0, totalVolume: '0' },
+        user: user ? {
+          ...user,
+          totalVolume: userVolumeUSDT,
+        } : { address, ordersCreated: 0, ordersCompleted: 0, totalVolume: '0' },
         openOrders,
         completedOrders,
         pendingEscrows,
@@ -63,21 +81,27 @@ export async function GET(request: NextRequest) {
     ]);
 
     // Calculate total volume from completed orders
+    // sellAmount is stored in wei (18 decimals), need to convert to human-readable
     const completedOrdersData = await prisma.order.findMany({
       where: { status: 'COMPLETED' },
       select: { sellAmount: true },
     });
 
-    const totalVolume = completedOrdersData.reduce((sum, order) => {
-      return sum + parseFloat(order.sellAmount || '0');
-    }, 0);
+    // Convert from wei to USDT (divide by 10^18) and sum
+    const totalVolumeWei = completedOrdersData.reduce((sum, order) => {
+      const amountWei = BigInt(order.sellAmount || '0');
+      return sum + amountWei;
+    }, BigInt(0));
+    
+    // Convert to USDT (18 decimals)
+    const totalVolumeUSDT = Number(totalVolumeWei) / 1e18;
 
     return NextResponse.json({
       totalOrders,
       openOrders,
       completedOrders,
       totalUsers,
-      totalVolume: totalVolume.toString(),
+      totalVolume: totalVolumeUSDT.toString(), // Already in USDT, not wei
       recentOrders,
     });
   } catch (error) {

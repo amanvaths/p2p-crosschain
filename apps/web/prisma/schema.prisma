@@ -15,46 +15,47 @@ datasource db {
 // Order: Main order record from orderbook
 // -----------------------------------------------------------------------------
 model Order {
-  id              String      @id @default(uuid())
-  orderId         BigInt      @unique // On-chain order ID
-  chainId         Int         // Chain where order was created (srcChainId)
-  
+  id      String @id @default(uuid())
+  orderId BigInt @unique // On-chain order ID
+  chainId Int // Chain where order was created (srcChainId)
+
   // Maker info
-  maker           String      @db.VarChar(42) // Address
-  
+  maker        String  @db.VarChar(42) // Address
+  takerAddress String? @db.VarChar(42) // Taker address (from OrderMatched/OrderCompleted events)
+
   // Trade details
-  sellToken       String      @db.VarChar(42)
-  sellAmount      String      // Using String for BigInt compatibility
-  buyToken        String      @db.VarChar(42)
-  buyAmount       String
-  
+  sellToken  String @db.VarChar(42)
+  sellAmount String // Using String for BigInt compatibility
+  buyToken   String @db.VarChar(42)
+  buyAmount  String
+
   // Cross-chain info
-  srcChainId      Int
-  dstChainId      Int
-  
+  srcChainId Int
+  dstChainId Int
+
   // HTLC params
-  hashLock        String      @db.VarChar(66) // bytes32 as hex
-  makerTimelock   BigInt      // Unix timestamp
-  takerTimelock   BigInt
-  
+  hashLock      String @db.VarChar(66) // bytes32 as hex
+  makerTimelock BigInt // Unix timestamp
+  takerTimelock BigInt
+
   // Order state
-  status          OrderStatus @default(OPEN)
-  cancelled       Boolean     @default(false)
-  
+  status    OrderStatus @default(OPEN)
+  cancelled Boolean     @default(false)
+
   // Secret (revealed after maker claims on dst chain)
-  secret          String?     @db.VarChar(66)
-  
+  secret String? @db.VarChar(66)
+
   // Metadata
-  txHash          String      @db.VarChar(66)
-  blockNumber     BigInt
-  logIndex        Int
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  txHash      String @db.VarChar(66)
+  blockNumber BigInt
+  logIndex    Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  escrows         Escrow[]
-  events          Event[]
+  escrows Escrow[]
+  events  Event[]
 
   @@index([status])
   @@index([chainId])
@@ -78,37 +79,37 @@ enum OrderStatus {
 // Escrow: Lock state per chain
 // -----------------------------------------------------------------------------
 model Escrow {
-  id              String        @id @default(uuid())
-  orderId         String
-  order           Order         @relation(fields: [orderId], references: [id])
-  
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
   // Lock identification
-  lockId          String        @unique @db.VarChar(66) // On-chain lock ID
-  chainId         Int
-  
+  lockId  String @unique @db.VarChar(66) // On-chain lock ID
+  chainId Int
+
   // Lock details
-  depositor       String        @db.VarChar(42)
-  recipient       String        @db.VarChar(42)
-  token           String        @db.VarChar(42)
-  amount          String
-  hashLock        String        @db.VarChar(66)
-  timelock        BigInt        // Unix timestamp
-  
+  depositor String @db.VarChar(42)
+  recipient String @db.VarChar(42)
+  token     String @db.VarChar(42)
+  amount    String
+  hashLock  String @db.VarChar(66)
+  timelock  BigInt // Unix timestamp
+
   // State
-  status          EscrowStatus  @default(LOCKED)
-  
+  status EscrowStatus @default(LOCKED)
+
   // Resolution
-  secret          String?       @db.VarChar(66) // Revealed on claim
-  claimedTxHash   String?       @db.VarChar(66)
-  refundedTxHash  String?       @db.VarChar(66)
-  
+  secret         String? @db.VarChar(66) // Revealed on claim
+  claimedTxHash  String? @db.VarChar(66)
+  refundedTxHash String? @db.VarChar(66)
+
   // Metadata
-  txHash          String        @db.VarChar(66)
-  blockNumber     BigInt
-  logIndex        Int
-  
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  txHash      String @db.VarChar(66)
+  blockNumber BigInt
+  logIndex    Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([orderId])
   @@index([chainId])
@@ -128,35 +129,35 @@ enum EscrowStatus {
 // Event: Raw indexed events for reorg tolerance
 // -----------------------------------------------------------------------------
 model Event {
-  id              String      @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Chain info
   chainId         Int
-  contractAddress String      @db.VarChar(42)
-  
+  contractAddress String @db.VarChar(42)
+
   // Event details
-  eventName       String
-  txHash          String      @db.VarChar(66)
-  blockNumber     BigInt
-  blockHash       String      @db.VarChar(66)
-  logIndex        Int
-  
+  eventName   String
+  txHash      String @db.VarChar(66)
+  blockNumber BigInt
+  blockHash   String @db.VarChar(66)
+  logIndex    Int
+
   // Event data (JSON encoded args)
-  args            Json
-  
+  args Json
+
   // Processing state
-  processed       Boolean     @default(false)
-  processedAt     DateTime?
-  
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+
   // For reorg handling
-  removed         Boolean     @default(false)
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  removed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Optional relation to order
-  orderId         String?
-  order           Order?      @relation(fields: [orderId], references: [id])
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
 
   @@unique([chainId, txHash, logIndex])
   @@index([chainId, blockNumber])
@@ -169,22 +170,22 @@ model Event {
 // ChainConfig: Per-chain contract addresses and settings
 // -----------------------------------------------------------------------------
 model ChainConfig {
-  id              String      @id @default(uuid())
-  chainId         Int         @unique
-  name            String
-  rpcUrl          String
-  orderbookAddress String     @db.VarChar(42)
-  escrowAddress   String      @db.VarChar(42)
-  blockExplorer   String
-  
+  id               String @id @default(uuid())
+  chainId          Int    @unique
+  name             String
+  rpcUrl           String
+  orderbookAddress String @db.VarChar(42)
+  escrowAddress    String @db.VarChar(42)
+  blockExplorer    String
+
   // Indexer state
-  lastIndexedBlock BigInt     @default(0)
-  
+  lastIndexedBlock BigInt @default(0)
+
   // Status
-  isActive        Boolean     @default(true)
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("chain_configs")
 }
@@ -193,11 +194,11 @@ model ChainConfig {
 // IndexerState: Track indexer progress per chain
 // -----------------------------------------------------------------------------
 model IndexerState {
-  id              String      @id @default(uuid())
-  chainId         Int         @unique
+  id              String   @id @default(uuid())
+  chainId         Int      @unique
   lastBlockNumber BigInt
-  lastBlockHash   String      @db.VarChar(66)
-  updatedAt       DateTime    @updatedAt
+  lastBlockHash   String   @db.VarChar(66)
+  updatedAt       DateTime @updatedAt
 
   @@map("indexer_states")
 }
@@ -206,22 +207,22 @@ model IndexerState {
 // User: Optional user tracking
 // -----------------------------------------------------------------------------
 model User {
-  id              String      @id @default(uuid())
-  address         String      @unique @db.VarChar(42)
-  
+  id      String @id @default(uuid())
+  address String @unique @db.VarChar(42)
+
   // Stats
-  ordersCreated   Int         @default(0)
-  ordersCompleted Int         @default(0)
-  totalVolume     String      @default("0") // In USD or base currency
-  
+  ordersCreated   Int    @default(0)
+  ordersCompleted Int    @default(0)
+  totalVolume     String @default("0") // In USD or base currency
+
   // Optional profile
-  ens             String?
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  ens String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  watchlist       Watchlist[]
+  watchlist Watchlist[]
 
   @@map("users")
 }
@@ -230,15 +231,14 @@ model User {
 // Watchlist: User's watched orders
 // -----------------------------------------------------------------------------
 model Watchlist {
-  id              String      @id @default(uuid())
-  userId          String
-  user            User        @relation(fields: [userId], references: [id])
-  orderOnChainId  BigInt      // References on-chain order ID
-  chainId         Int
-  
-  createdAt       DateTime    @default(now())
+  id             String @id @default(uuid())
+  userId         String
+  user           User   @relation(fields: [userId], references: [id])
+  orderOnChainId BigInt // References on-chain order ID
+  chainId        Int
+
+  createdAt DateTime @default(now())
 
   @@unique([userId, orderOnChainId, chainId])
   @@map("watchlists")
 }
-

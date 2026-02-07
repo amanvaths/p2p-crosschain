@@ -74,6 +74,7 @@ export function useDbOrders(params?: {
 }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalLocked, setTotalLocked] = useState<string>('0');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,9 +102,11 @@ export function useDbOrders(params?: {
       const data = await response.json();
       setOrders(data.orders || []);
       setTotal(data.total || 0);
+      setTotalLocked(data.totalLocked || '0');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       setOrders([]);
+      setTotalLocked('0');
     } finally {
       setLoading(false);
     }
@@ -113,7 +116,7 @@ export function useDbOrders(params?: {
     fetchOrders();
   }, [fetchOrders]);
 
-  return { orders, total, loading, error, refetch: fetchOrders };
+  return { orders, total, totalLocked, loading, error, refetch: fetchOrders };
 }
 
 // =============================================================================

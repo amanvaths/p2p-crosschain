@@ -8,6 +8,7 @@ import { decodeEventLog } from 'viem';
 import { P2PVaultBSCABI, P2PVaultDSCABI } from '@p2p/shared';
 import prisma from '../db.js';
 import { OrderStatus } from '@prisma/client';
+import { safeDbOperation } from '../connection-manager.js';
 
 // BSC Chain ID
 const BSC_CHAIN_ID = 56;
@@ -55,32 +56,34 @@ export async function processBscVaultEvent(
 
   console.log(`[BSC] Processing ${decoded.eventName}`);
 
-  // Store raw event
-  const event = await prisma.event.upsert({
-    where: {
-      chainId_txHash_logIndex: {
-        chainId,
-        txHash: decoded.txHash,
-        logIndex: decoded.logIndex,
+  // Store raw event (with retry)
+  const event = await safeDbOperation(async () => {
+    return await prisma.event.upsert({
+      where: {
+        chainId_txHash_logIndex: {
+          chainId,
+          txHash: decoded.txHash,
+          logIndex: decoded.logIndex,
+        },
       },
-    },
-    create: {
-      chainId,
-      contractAddress,
-      eventName: decoded.eventName,
-      txHash: decoded.txHash,
-      blockNumber: decoded.blockNumber,
-      blockHash: decoded.blockHash,
-      logIndex: decoded.logIndex,
-      args: decoded.args,
-      processed: false,
-    },
-    update: {
-      args: decoded.args,
-      blockHash: decoded.blockHash,
-      removed: false,
-    },
-  });
+      create: {
+        chainId,
+        contractAddress,
+        eventName: decoded.eventName,
+        txHash: decoded.txHash,
+        blockNumber: decoded.blockNumber,
+        blockHash: decoded.blockHash,
+        logIndex: decoded.logIndex,
+        args: decoded.args,
+        processed: false,
+      },
+      update: {
+        args: decoded.args,
+        blockHash: decoded.blockHash,
+        removed: false,
+      },
+    });
+  }, `store BSC event ${decoded.eventName}`);
 
   // Process based on event type
   switch (decoded.eventName) {
@@ -101,10 +104,12 @@ export async function processBscVaultEvent(
       break;
   }
 
-  await prisma.event.update({
-    where: { id: event.id },
-    data: { processed: true, processedAt: new Date() },
-  });
+  await safeDbOperation(async () => {
+    await prisma.event.update({
+      where: { id: event.id },
+      data: { processed: true, processedAt: new Date() },
+    });
+  }, `mark BSC event ${decoded.eventName} as processed`);
 }
 
 async function processBscOrderCreated(
@@ -119,54 +124,62 @@ async function processBscOrderCreated(
     expiresAt: bigint;
   };
 
-  const existing = await prisma.order.findUnique({
-    where: { orderId: args.orderId },
-  });
+  const existing = await safeDbOperation(async () => {
+    return await prisma.order.findUnique({
+      where: { orderId: args.orderId },
+    });
+  }, `check existing BSC order ${args.orderId}`);
 
   if (existing) {
     console.log(`Order ${args.orderId} already exists`);
     return;
   }
 
-  // Create order - BUY order on BSC
-  const order = await prisma.order.create({
-    data: {
-      orderId: args.orderId,
-      chainId,
-      maker: args.buyer.toLowerCase(),
-      sellToken: '0x55d398326f99059ff775485246999027b3197955', // BSC USDT
-      sellAmount: args.amount.toString(),
-      buyToken: '0xbc27aceac6865de31a286cd9057564393d5251cb', // DSC USDT
-      buyAmount: args.amount.toString(),
-      srcChainId: BSC_CHAIN_ID,
-      dstChainId: DSC_CHAIN_ID,
-      hashLock: '0x0000000000000000000000000000000000000000000000000000000000000000',
-      makerTimelock: args.expiresAt,
-      takerTimelock: args.expiresAt,
-      status: OrderStatus.OPEN,
-      cancelled: false,
-      txHash: event.txHash,
-      blockNumber: event.blockNumber,
-      logIndex: event.logIndex,
-    },
-  });
+  // Create order - BUY order on BSC (with retry)
+  const order = await safeDbOperation(async () => {
+    return await prisma.order.create({
+      data: {
+        orderId: args.orderId,
+        chainId,
+        maker: args.buyer.toLowerCase(),
+        sellToken: '0x55d398326f99059ff775485246999027b3197955', // BSC USDT
+        sellAmount: args.amount.toString(),
+        buyToken: '0xbc27aceac6865de31a286cd9057564393d5251cb', // DSC USDT
+        buyAmount: args.amount.toString(),
+        srcChainId: BSC_CHAIN_ID,
+        dstChainId: DSC_CHAIN_ID,
+        hashLock: '0x0000000000000000000000000000000000000000000000000000000000000000',
+        makerTimelock: args.expiresAt,
+        takerTimelock: args.expiresAt,
+        status: OrderStatus.OPEN,
+        cancelled: false,
+        txHash: event.txHash,
+        blockNumber: event.blockNumber,
+        logIndex: event.logIndex,
+      },
+    });
+  }, `create BSC order ${args.orderId}`);
 
-  await prisma.event.update({
-    where: { id: eventId },
-    data: { orderId: order.id },
-  });
+  await safeDbOperation(async () => {
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { orderId: order.id },
+    });
+  }, `link event to BSC order`);
 
-  // Update user stats
-  await prisma.user.upsert({
-    where: { address: args.buyer.toLowerCase() },
-    create: {
-      address: args.buyer.toLowerCase(),
-      ordersCreated: 1,
-    },
-    update: {
-      ordersCreated: { increment: 1 },
-    },
-  });
+  // Update user stats (with retry)
+  await safeDbOperation(async () => {
+    await prisma.user.upsert({
+      where: { address: args.buyer.toLowerCase() },
+      create: {
+        address: args.buyer.toLowerCase(),
+        ordersCreated: 1,
+      },
+      update: {
+        ordersCreated: { increment: 1 },
+      },
+    });
+  }, `update user stats for BSC order`);
 
   console.log(`Created BSC buy order ${order.id} (on-chain: ${args.orderId})`);
 }
@@ -214,26 +227,36 @@ async function processBscOrderMatched(
     amount: bigint;
   };
 
-  const order = await prisma.order.findUnique({
-    where: { orderId: args.orderId },
-  });
+  const order = await safeDbOperation(async () => {
+    return await prisma.order.findUnique({
+      where: { orderId: args.orderId },
+    });
+  }, `find order ${args.orderId} for match`);
 
   if (!order) {
     console.warn(`Order ${args.orderId} not found for match`);
     return;
   }
 
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { status: OrderStatus.MAKER_LOCKED },
-  });
+  // For BSC orders: maker is buyer, taker is seller
+  await safeDbOperation(async () => {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { 
+        status: OrderStatus.MAKER_LOCKED,
+        takerAddress: args.seller.toLowerCase(), // Store taker address
+      },
+    });
+  }, `update order ${order.id} status and taker`);
 
-  await prisma.event.update({
-    where: { id: eventId },
-    data: { orderId: order.id },
-  });
+  await safeDbOperation(async () => {
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { orderId: order.id },
+    });
+  }, `link event ${eventId} to order ${order.id}`);
 
-  console.log(`Matched order ${order.id}`);
+  console.log(`Matched order ${order.id} with taker ${args.seller}`);
 }
 
 async function processBscOrderCompleted(
@@ -248,37 +271,55 @@ async function processBscOrderCompleted(
     dscTxHash: Hash;
   };
 
-  const order = await prisma.order.findUnique({
-    where: { orderId: args.orderId },
-  });
+  const order = await safeDbOperation(async () => {
+    return await prisma.order.findUnique({
+      where: { orderId: args.orderId },
+    });
+  }, `find order ${args.orderId} for completion`);
 
   if (!order) {
     console.warn(`Order ${args.orderId} not found for completion`);
     return;
   }
 
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { status: OrderStatus.COMPLETED },
-  });
+  // For BSC orders: maker is buyer, taker is seller
+  // Update order status and taker address if not already set
+  await safeDbOperation(async () => {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { 
+        status: OrderStatus.COMPLETED,
+        takerAddress: args.seller.toLowerCase(), // Store taker address if not already set
+      },
+    });
+  }, `update order ${order.id} to completed`);
 
   // Update user stats
-  await prisma.user.update({
-    where: { address: args.buyer.toLowerCase() },
-    data: {
-      ordersCompleted: { increment: 1 },
-      totalVolume: {
-        set: (BigInt(order.sellAmount) + BigInt(await getUserVolume(args.buyer.toLowerCase()))).toString(),
-      },
-    },
-  });
+  try {
+    await safeDbOperation(async () => {
+      await prisma.user.update({
+        where: { address: args.buyer.toLowerCase() },
+        data: {
+          ordersCompleted: { increment: 1 },
+          totalVolume: {
+            set: (BigInt(order.sellAmount) + BigInt(await getUserVolume(args.buyer.toLowerCase()))).toString(),
+          },
+        },
+      });
+    }, `update user stats for ${args.buyer}`);
+  } catch (error) {
+    // User might not exist, that's okay
+    console.log(`User ${args.buyer} not found for stats update`);
+  }
 
-  await prisma.event.update({
-    where: { id: eventId },
-    data: { orderId: order.id },
-  });
+  await safeDbOperation(async () => {
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { orderId: order.id },
+    });
+  }, `link event ${eventId} to order ${order.id}`);
 
-  console.log(`Completed order ${order.id}`);
+  console.log(`Completed order ${order.id} with taker ${args.seller}`);
 }
 
 async function processBscOrderRefunded(
@@ -346,8 +387,9 @@ export async function processDscVaultEvent(
 
   console.log(`[DSC] Processing ${decoded.eventName}`);
 
-  // Store raw event
-  const event = await prisma.event.upsert({
+  // Store raw event (with retry)
+  const event = await safeDbOperation(async () => {
+    return await prisma.event.upsert({
     where: {
       chainId_txHash_logIndex: {
         chainId,
@@ -372,6 +414,7 @@ export async function processDscVaultEvent(
       removed: false,
     },
   });
+  }, `store DSC event ${decoded.eventName}`);
 
   // Process based on event type
   switch (decoded.eventName) {
@@ -419,45 +462,51 @@ async function processDscSellOrderCreated(
     return;
   }
 
-  // Create order - SELL order on DSC
-  const order = await prisma.order.create({
-    data: {
-      orderId: uniqueOrderId,
-      chainId,
-      maker: args.seller.toLowerCase(),
-      sellToken: '0xbc27aceac6865de31a286cd9057564393d5251cb', // DSC USDT
-      sellAmount: args.amount.toString(),
-      buyToken: '0x55d398326f99059ff775485246999027b3197955', // BSC USDT
-      buyAmount: args.amount.toString(),
-      srcChainId: DSC_CHAIN_ID,
-      dstChainId: BSC_CHAIN_ID,
-      hashLock: '0x0000000000000000000000000000000000000000000000000000000000000000',
-      makerTimelock: args.expiresAt,
-      takerTimelock: args.expiresAt,
-      status: OrderStatus.OPEN,
-      cancelled: false,
-      txHash: event.txHash,
-      blockNumber: event.blockNumber,
-      logIndex: event.logIndex,
-    },
-  });
+  // Create order - SELL order on DSC (with retry)
+  const order = await safeDbOperation(async () => {
+    return await prisma.order.create({
+      data: {
+        orderId: uniqueOrderId,
+        chainId,
+        maker: args.seller.toLowerCase(),
+        sellToken: '0xbc27aceac6865de31a286cd9057564393d5251cb', // DSC USDT
+        sellAmount: args.amount.toString(),
+        buyToken: '0x55d398326f99059ff775485246999027b3197955', // BSC USDT
+        buyAmount: args.amount.toString(),
+        srcChainId: DSC_CHAIN_ID,
+        dstChainId: BSC_CHAIN_ID,
+        hashLock: '0x0000000000000000000000000000000000000000000000000000000000000000',
+        makerTimelock: args.expiresAt,
+        takerTimelock: args.expiresAt,
+        status: OrderStatus.OPEN,
+        cancelled: false,
+        txHash: event.txHash,
+        blockNumber: event.blockNumber,
+        logIndex: event.logIndex,
+      },
+    });
+  }, `create DSC order ${args.orderId}`);
 
-  await prisma.event.update({
-    where: { id: eventId },
-    data: { orderId: order.id },
-  });
+  await safeDbOperation(async () => {
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { orderId: order.id },
+    });
+  }, `link event to DSC order`);
 
-  // Update user stats
-  await prisma.user.upsert({
-    where: { address: args.seller.toLowerCase() },
-    create: {
-      address: args.seller.toLowerCase(),
-      ordersCreated: 1,
-    },
-    update: {
-      ordersCreated: { increment: 1 },
-    },
-  });
+  // Update user stats (with retry)
+  await safeDbOperation(async () => {
+    await prisma.user.upsert({
+      where: { address: args.seller.toLowerCase() },
+      create: {
+        address: args.seller.toLowerCase(),
+        ordersCreated: 1,
+      },
+      update: {
+        ordersCreated: { increment: 1 },
+      },
+    });
+  }, `update user stats for DSC order`);
 
   console.log(`Created DSC sell order ${order.id} (on-chain: ${args.orderId})`);
 }
@@ -532,18 +581,34 @@ async function processDscOrderCompleted(
   };
 
   // Complete both orders
-  const bscOrder = await prisma.order.findUnique({
-    where: { orderId: args.bscOrderId },
-  });
+  const bscOrder = await safeDbOperation(async () => {
+    return await prisma.order.findUnique({
+      where: { orderId: args.bscOrderId },
+    });
+  }, `find BSC order ${args.bscOrderId} for DSC completion`);
 
   if (bscOrder) {
-    await prisma.order.update({
-      where: { id: bscOrder.id },
-      data: { status: OrderStatus.COMPLETED },
-    });
+    // For BSC orders: maker is buyer, taker is seller
+    await safeDbOperation(async () => {
+      await prisma.order.update({
+        where: { id: bscOrder.id },
+        data: { 
+          status: OrderStatus.COMPLETED,
+          takerAddress: args.seller.toLowerCase(), // Store taker address
+        },
+      });
+    }, `update BSC order ${bscOrder.id} to completed with taker`);
+
+    // Link event to order
+    await safeDbOperation(async () => {
+      await prisma.event.update({
+        where: { id: eventId },
+        data: { orderId: bscOrder.id },
+      });
+    }, `link DSC completion event to BSC order ${bscOrder.id}`);
   }
 
-  console.log(`Completed cross-chain trade: BSC ${args.bscOrderId} <-> DSC ${args.dscOrderId}`);
+  console.log(`Completed cross-chain trade: BSC ${args.bscOrderId} <-> DSC ${args.dscOrderId} with taker ${args.seller}`);
 }
 
 // Helper function to get user's current volume
