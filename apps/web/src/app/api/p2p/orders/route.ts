@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { createPublicClient, http } from "viem";
-import { bsc, dsc } from "viem/chains";
+import { bsc } from "viem/chains";
 import {
   P2PVaultBSCABI,
   P2PVaultDSCABI,
@@ -9,6 +9,7 @@ import {
   BSC_CHAIN_ID,
   DSC_CHAIN_ID,
 } from "@/lib/contracts";
+import { dscChain } from "@/lib/wagmi";
 
 // GET - Fetch orders with filters
 export async function GET(request: NextRequest) {
@@ -308,7 +309,7 @@ export async function GET(request: NextRequest) {
               abi = P2PVaultBSCABI;
             } else if (chainId === DSC_CHAIN_ID) {
               client = createPublicClient({
-                chain: dsc,
+                chain: dscChain,
                 transport: http(
                   process.env.NEXT_PUBLIC_CHAIN_B_RPC_URL ||
                     "https://rpc01.dscscan.io/"
@@ -502,7 +503,7 @@ export async function GET(request: NextRequest) {
               vaultAddress = getContractAddress(BSC_CHAIN_ID, "vault");
             } else if (chainId === DSC_CHAIN_ID) {
               client = createPublicClient({
-                chain: dsc,
+                chain: dscChain,
                 transport: http(
                   process.env.NEXT_PUBLIC_CHAIN_B_RPC_URL ||
                     "https://rpc01.dscscan.io/"
