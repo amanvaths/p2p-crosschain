@@ -9,7 +9,7 @@ import { P2PVaultBSCABI, P2PVaultDSCABI } from "@p2p/shared";
 import prisma from "../db.js";
 import { OrderStatus } from "@prisma/client";
 import { safeDbOperation } from "../connection-manager.js";
-
+import { Prisma } from "@prisma/client";
 // BSC Chain ID
 const BSC_CHAIN_ID = 56;
 const DSC_CHAIN_ID = 1555;
@@ -27,6 +27,7 @@ interface ProcessedEvent {
 // Process BSC Vault Events (Buy Orders)
 // =============================================================================
 
+// const safeArgs = safeJson(decoded.args);
 export async function processBscVaultEvent(
   chainId: number,
   contractAddress: Address,
@@ -121,7 +122,7 @@ async function processBscOrderCreated(
 ): Promise<void> {
   const args = event.args as {
     orderId: bigint;
-    buyer: Address;
+    user: Address;
     amount: bigint;
     expiresAt: bigint;
   };
@@ -268,7 +269,7 @@ async function processBscOrderCompleted(
 ): Promise<void> {
   const args = event.args as {
     orderId: bigint;
-    buyer: Address;
+    user: Address;
     seller: Address;
     amount: bigint;
     dscTxHash: Hash;
@@ -301,21 +302,21 @@ async function processBscOrderCompleted(
   try {
     await safeDbOperation(async () => {
       await prisma.user.update({
-        where: { address: args.buyer.toLowerCase() },
+        where: { address: args.user.toLowerCase() },
         data: {
           ordersCompleted: { increment: 1 },
           totalVolume: {
             set: (
               BigInt(order.sellAmount) +
-              BigInt(await getUserVolume(args.buyer.toLowerCase()))
+              BigInt(await getUserVolume(args.user.toLowerCase()))
             ).toString(),
           },
         },
       });
-    }, `update user stats for ${args.buyer}`);
+    }, `update user stats for ${args.user}`);
   } catch (error) {
     // User might not exist, that's okay
-    console.log(`User ${args.buyer} not found for stats update`);
+    console.log(`User ${args.user} not found for stats update`);
   }
 
   await safeDbOperation(async () => {
@@ -452,7 +453,7 @@ async function processDscSellOrderCreated(
 ): Promise<void> {
   const args = event.args as {
     orderId: bigint;
-    seller: Address;
+    user: Address;
     amount: bigint;
     expiresAt: bigint;
   };
