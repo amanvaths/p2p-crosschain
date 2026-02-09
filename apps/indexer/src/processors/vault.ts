@@ -33,7 +33,7 @@ export async function processBscVaultEvent(
   contractAddress: Address,
   log: Log
 ): Promise<void> {
-  let decoded: ProcessedEvent;
+  let decoded: any;
   console.log("line no 36 ================================");
   try {
     const result = decodeEventLog({
@@ -370,7 +370,7 @@ export async function processDscVaultEvent(
   contractAddress: Address,
   log: Log
 ): Promise<void> {
-  let decoded: ProcessedEvent;
+  let decoded: any;
 
   try {
     const result = decodeEventLog({
