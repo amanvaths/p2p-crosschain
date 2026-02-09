@@ -2556,7 +2556,7 @@ export default function HomePage() {
         {/* Order List with Infinite Scroll */}
         <div className="bg-surface border border-white/5 rounded-b-xl overflow-hidden">
           <div ref={listRef} className="divide-y divide-white/5">
-            {displayedOrders.map((order, index) => (
+            {displayedOrders.map((order: any, index: any) => (
               <OrderRow
                 key={order.id}
                 order={order}
