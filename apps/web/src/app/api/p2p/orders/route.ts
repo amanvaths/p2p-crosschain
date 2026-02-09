@@ -9,7 +9,23 @@ import {
   BSC_CHAIN_ID,
   DSC_CHAIN_ID,
 } from "@/lib/contracts";
-import { dscChain } from "@/lib/wagmi";
+const dscChain = {
+  id: 1555,
+  name: "DSC Chain",
+  nativeCurrency: {
+    decimals: 18,
+    name: "DSC",
+    symbol: "DSC",
+  },
+  rpcUrls: {
+    default: {
+      http: ["https://rpc01.dscscan.io/"],
+    },
+  },
+  blockExplorers: {
+    default: { name: "DSCScan", url: "https://dscscan.io" },
+  },
+} as const;
 
 // GET - Fetch orders with filters
 export async function GET(request: NextRequest) {
