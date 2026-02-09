@@ -1,195 +1,209 @@
-'use client';
+"use client";
 
-// =============================================================================
-// P2P Exchange - Home Page with Buy/Sell Tabs
-// Production Version - Uses real data from blockchain & database
-// =============================================================================
-
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useSwitchChain } from 'wagmi';
-import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { formatUnits, parseUnits } from 'viem';
-import { useP2PIntegration, type UIOrder } from '@/hooks/useP2PIntegration';
-import { useDbOrders, useDbStats, type Order, type Stats } from '@/hooks/useDatabase';
-import { useCancelBscOrder, useCancelDscOrder } from '@/hooks/useP2PVault';
-import { getContractAddress, BSC_CHAIN_ID, DSC_CHAIN_ID } from '@/lib/contracts';
-
-// =============================================================================
-// Create Order Modal Component
-// =============================================================================
+import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useSwitchChain,
+} from "wagmi";
+import { useConnectModal } from "@rainbow-me/rainbowkit";
+import { formatUnits, parseUnits } from "viem";
+import { useP2PIntegration, type UIOrder } from "@/hooks/useP2PIntegration";
+import {
+  useDbOrders,
+  useDbStats,
+  type Order,
+  type Stats,
+} from "@/hooks/useDatabase";
+import { useCancelBscOrder, useCancelDscOrder } from "@/hooks/useP2PVault";
+import {
+  getContractAddress,
+  BSC_CHAIN_ID,
+  DSC_CHAIN_ID,
+} from "@/lib/contracts";
 
 interface CreateOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateOrder?: (type: 'buy' | 'sell', amount: string) => Promise<void>;
+  onCreateOrder?: (type: "buy" | "sell", amount: string) => Promise<void>;
   onSuccess?: () => void;
 }
 
-const FIXED_PRICE = '1.00'; // Fixed price $1
+const FIXED_PRICE = "1.00"; // Fixed price $1
 
-function CreateOrderModal({ isOpen, onClose, onSuccess }: CreateOrderModalProps) {
+function CreateOrderModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: CreateOrderModalProps) {
   const { isConnected, chainId } = useAccount();
   const { openConnectModal } = useConnectModal();
   const { switchChainAsync } = useSwitchChain();
-  
+
   // Form state
-  const [orderType, setOrderType] = useState<'buy' | 'sell'>('buy');
-  const [amount, setAmount] = useState('');
-  
+  const [orderType, setOrderType] = useState<"buy" | "sell">("buy");
+  const [amount, setAmount] = useState("");
+
   // Transaction state
-  const [currentStep, setCurrentStep] = useState<'form' | 'approving' | 'creating' | 'done' | 'error'>('form');
-  const [errorMessage, setErrorMessage] = useState('');
-  
+  const [currentStep, setCurrentStep] = useState<
+    "form" | "approving" | "creating" | "done" | "error"
+  >("form");
+  const [errorMessage, setErrorMessage] = useState("");
+
   // Approval transaction
-  const { 
-    data: approveHash, 
-    writeContractAsync: writeApproveAsync, 
+  const {
+    data: approveHash,
+    writeContractAsync: writeApproveAsync,
     isPending: isApprovePending,
-    reset: resetApprove 
+    reset: resetApprove,
   } = useWriteContract();
-  
-  const { 
-    isLoading: isApproveConfirming, 
-    isSuccess: isApproveSuccess 
-  } = useWaitForTransactionReceipt({ hash: approveHash });
-  
+
+  const { isLoading: isApproveConfirming, isSuccess: isApproveSuccess } =
+    useWaitForTransactionReceipt({ hash: approveHash });
+
   // Create order transaction
-  const { 
-    data: createHash, 
-    writeContractAsync: writeCreateAsync, 
+  const {
+    data: createHash,
+    writeContractAsync: writeCreateAsync,
     isPending: isCreatePending,
-    reset: resetCreate 
+    reset: resetCreate,
   } = useWriteContract();
-  
-  const { 
-    isLoading: isCreateConfirming, 
-    isSuccess: isCreateSuccess 
-  } = useWaitForTransactionReceipt({ hash: createHash });
-  
+
+  const { isLoading: isCreateConfirming, isSuccess: isCreateSuccess } =
+    useWaitForTransactionReceipt({ hash: createHash });
+
   // Contract addresses based on order type
-  const isBuyOrder = orderType === 'buy';
+  const isBuyOrder = orderType === "buy";
   const targetChainId = isBuyOrder ? BSC_CHAIN_ID : DSC_CHAIN_ID;
-  const vaultAddress = getContractAddress(targetChainId, 'vault');
-  const usdtAddress = getContractAddress(targetChainId, 'usdt');
+  const vaultAddress = getContractAddress(targetChainId, "vault");
+  const usdtAddress = getContractAddress(targetChainId, "usdt");
   const amountWei = amount ? parseUnits(amount, 18) : BigInt(0);
-  
+
   // DEBUG: Log addresses when modal opens
-  console.log('CreateOrderModal - Addresses:', {
+  console.log("CreateOrderModal - Addresses:", {
     orderType,
     targetChainId,
     vaultAddress,
     usdtAddress,
-    expectedDscVault: '0xb4e3Ce07DD861dC10da09Ef7574A07b73470D99d',
+    expectedDscVault: "0xb4e3Ce07DD861dC10da09Ef7574A07b73470D99d",
   });
-  
+
   // Watch for approval success -> auto trigger create
   useEffect(() => {
-    if (approveHash && isApproveSuccess && currentStep === 'approving') {
-      console.log('Approval confirmed, creating order...');
+    if (approveHash && isApproveSuccess && currentStep === "approving") {
+      console.log("Approval confirmed, creating order...");
       setTimeout(() => triggerCreateOrder(), 1000);
     }
   }, [approveHash, isApproveSuccess, currentStep]);
-  
+
   // Watch for create success
   useEffect(() => {
-    if (createHash && isCreateSuccess && currentStep === 'creating') {
-      console.log('Order created!');
-      setCurrentStep('done');
+    if (createHash && isCreateSuccess && currentStep === "creating") {
+      console.log("Order created!");
+      setCurrentStep("done");
       setTimeout(() => {
         onSuccess?.();
       }, 2000);
     }
   }, [createHash, isCreateSuccess, currentStep]);
-  
+
   // Reset modal state
   const resetModal = () => {
-    setOrderType('buy');
-    setAmount('');
-    setCurrentStep('form');
-    setErrorMessage('');
+    setOrderType("buy");
+    setAmount("");
+    setCurrentStep("form");
+    setErrorMessage("");
     resetApprove();
     resetCreate();
   };
-  
+
   // Handle Enable button click
   const handleEnable = async () => {
     if (!isConnected) {
       openConnectModal?.();
       return;
     }
-    
+
     if (!amount || parseFloat(amount) <= 0) {
-      setErrorMessage('Please enter a valid amount');
-      setCurrentStep('error');
+      setErrorMessage("Please enter a valid amount");
+      setCurrentStep("error");
       return;
     }
-    
+
     try {
       // Switch chain if needed
       if (chainId !== targetChainId) {
-        console.log('Switching to chain:', targetChainId);
+        console.log("Switching to chain:", targetChainId);
         await switchChainAsync({ chainId: targetChainId });
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, 1500));
       }
-      
-      setCurrentStep('approving');
-      console.log('Approving...', { usdtAddress, vaultAddress, amount: amountWei.toString() });
-      
+
+      setCurrentStep("approving");
+      console.log("Approving...", {
+        usdtAddress,
+        vaultAddress,
+        amount: amountWei.toString(),
+      });
+
       const txHash = await writeApproveAsync({
         address: usdtAddress,
         abi: [
           {
-            type: 'function',
-            name: 'approve',
+            type: "function",
+            name: "approve",
             inputs: [
-              { name: 'spender', type: 'address' },
-              { name: 'amount', type: 'uint256' },
+              { name: "spender", type: "address" },
+              { name: "amount", type: "uint256" },
             ],
-            outputs: [{ name: '', type: 'bool' }],
-            stateMutability: 'nonpayable',
+            outputs: [{ name: "", type: "bool" }],
+            stateMutability: "nonpayable",
           },
         ],
-        functionName: 'approve',
+        functionName: "approve",
         args: [vaultAddress, amountWei],
         chainId: targetChainId,
       });
-      
-      console.log('Approve tx hash:', txHash);
-      
+
+      console.log("Approve tx hash:", txHash);
     } catch (e: unknown) {
-      console.error('Approval error:', e);
-      const errorMsg = e instanceof Error ? e.message : 'Approval failed';
-      if (errorMsg.includes('rejected')) {
-        setErrorMessage('Transaction cancelled by user');
+      console.error("Approval error:", e);
+      const errorMsg = e instanceof Error ? e.message : "Approval failed";
+      if (errorMsg.includes("rejected")) {
+        setErrorMessage("Transaction cancelled by user");
       } else {
         setErrorMessage(errorMsg.slice(0, 150));
       }
-      setCurrentStep('error');
+      setCurrentStep("error");
     }
   };
-  
+
   // Trigger create order transaction
   const triggerCreateOrder = async () => {
     try {
-      setCurrentStep('creating');
-      console.log('Creating order...', { vaultAddress, amount: amountWei.toString(), orderType });
-      
+      setCurrentStep("creating");
+      console.log("Creating order...", {
+        vaultAddress,
+        amount: amountWei.toString(),
+        orderType,
+      });
+
       let txHash: `0x${string}`;
-      
+
       if (isBuyOrder) {
         // Create buy order on BSC
         txHash = await writeCreateAsync({
           address: vaultAddress,
           abi: [
             {
-              type: 'function',
-              name: 'createBuyOrder',
-              inputs: [{ name: 'amount', type: 'uint256' }],
-              outputs: [{ name: 'orderId', type: 'uint256' }],
-              stateMutability: 'nonpayable',
+              type: "function",
+              name: "createBuyOrder",
+              inputs: [{ name: "amount", type: "uint256" }],
+              outputs: [{ name: "orderId", type: "uint256" }],
+              stateMutability: "nonpayable",
             },
           ],
-          functionName: 'createBuyOrder',
+          functionName: "createBuyOrder",
           args: [amountWei],
           chainId: targetChainId,
         });
@@ -199,100 +213,121 @@ function CreateOrderModal({ isOpen, onClose, onSuccess }: CreateOrderModalProps)
           address: vaultAddress,
           abi: [
             {
-              type: 'function',
-              name: 'createSellOrder',
-              inputs: [{ name: 'amount', type: 'uint256' }],
-              outputs: [{ name: 'orderId', type: 'uint256' }],
-              stateMutability: 'nonpayable',
+              type: "function",
+              name: "createSellOrder",
+              inputs: [{ name: "amount", type: "uint256" }],
+              outputs: [{ name: "orderId", type: "uint256" }],
+              stateMutability: "nonpayable",
             },
           ],
-          functionName: 'createSellOrder',
+          functionName: "createSellOrder",
           args: [amountWei],
           chainId: targetChainId,
         });
       }
-      
-      console.log('Create order tx hash:', txHash);
-      
+
+      console.log("Create order tx hash:", txHash);
     } catch (e: unknown) {
-      console.error('Create order error:', e);
-      const errorMsg = e instanceof Error ? e.message : 'Create order failed';
-      if (errorMsg.includes('rejected')) {
-        setErrorMessage('Transaction cancelled by user');
+      console.error("Create order error:", e);
+      const errorMsg = e instanceof Error ? e.message : "Create order failed";
+      if (errorMsg.includes("rejected")) {
+        setErrorMessage("Transaction cancelled by user");
       } else {
         setErrorMessage(errorMsg.slice(0, 150));
       }
-      setCurrentStep('error');
+      setCurrentStep("error");
     }
   };
-  
+
   const handleClose = () => {
-    if (currentStep === 'form' || currentStep === 'done' || currentStep === 'error') {
+    if (
+      currentStep === "form" ||
+      currentStep === "done" ||
+      currentStep === "error"
+    ) {
       resetModal();
       onClose();
     }
   };
-  
+
   const handleRetry = () => {
     resetApprove();
     resetCreate();
-    setCurrentStep('form');
-    setErrorMessage('');
+    setCurrentStep("form");
+    setErrorMessage("");
   };
 
   if (!isOpen) return null;
 
-  const numAmount = parseFloat(amount || '0');
+  const numAmount = parseFloat(amount || "0");
   const totalValue = (numAmount * parseFloat(FIXED_PRICE)).toFixed(2);
-  const isProcessing = currentStep === 'approving' || currentStep === 'creating';
-  
+  const isProcessing =
+    currentStep === "approving" || currentStep === "creating";
+
   // Step status helpers
   const getEnableStatus = () => {
-    if (currentStep === 'form') return 'ready';
-    if (currentStep === 'approving') {
-      if (isApprovePending) return 'signing';
-      if (approveHash && isApproveConfirming) return 'confirming';
-      return 'signing';
+    if (currentStep === "form") return "ready";
+    if (currentStep === "approving") {
+      if (isApprovePending) return "signing";
+      if (approveHash && isApproveConfirming) return "confirming";
+      return "signing";
     }
-    if (['creating', 'done'].includes(currentStep)) return 'done';
-    return 'pending';
+    if (["creating", "done"].includes(currentStep)) return "done";
+    return "pending";
   };
-  
+
   const getCreateStatus = () => {
-    if (['form', 'approving'].includes(currentStep)) return 'pending';
-    if (currentStep === 'creating') {
-      if (isCreatePending) return 'signing';
-      if (createHash && isCreateConfirming) return 'confirming';
-      return 'signing';
+    if (["form", "approving"].includes(currentStep)) return "pending";
+    if (currentStep === "creating") {
+      if (isCreatePending) return "signing";
+      if (createHash && isCreateConfirming) return "confirming";
+      return "signing";
     }
-    if (currentStep === 'done') return 'done';
-    return 'pending';
+    if (currentStep === "done") return "done";
+    return "pending";
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div 
+      <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={!isProcessing ? handleClose : undefined}
       />
-      
+
       <div className="relative bg-surface border border-white/10 rounded-2xl w-full max-w-md mx-4 p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-white">
-            {currentStep === 'form' ? 'Create Order' : isBuyOrder ? '🟢 Creating Buy Order' : '🔴 Creating Sell Order'}
+            {currentStep === "form"
+              ? "Create Order"
+              : isBuyOrder
+              ? "🟢 Creating Buy Order"
+              : "🔴 Creating Sell Order"}
           </h2>
           {!isProcessing && (
-            <button onClick={handleClose} className="text-muted hover:text-white">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <button
+              onClick={handleClose}
+              className="text-muted hover:text-white"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           )}
         </div>
 
         {/* Form Step */}
-        {currentStep === 'form' && (
+        {currentStep === "form" && (
           <>
             {/* Order Type Selection */}
             <div className="mb-5">
@@ -300,22 +335,22 @@ function CreateOrderModal({ isOpen, onClose, onSuccess }: CreateOrderModalProps)
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => setOrderType('buy')}
+                  onClick={() => setOrderType("buy")}
                   className={`py-4 rounded-xl font-bold text-lg transition-all ${
-                    orderType === 'buy'
-                      ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
-                      : 'bg-surface-light text-muted border border-white/5'
+                    orderType === "buy"
+                      ? "bg-green-500 text-white shadow-lg shadow-green-500/30"
+                      : "bg-surface-light text-muted border border-white/5"
                   }`}
                 >
                   🟢 BUY DEP20
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOrderType('sell')}
+                  onClick={() => setOrderType("sell")}
                   className={`py-4 rounded-xl font-bold text-lg transition-all ${
-                    orderType === 'sell'
-                      ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-                      : 'bg-surface-light text-muted border border-white/5'
+                    orderType === "sell"
+                      ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+                      : "bg-surface-light text-muted border border-white/5"
                   }`}
                 >
                   🔴 SELL DEP20
@@ -324,32 +359,54 @@ function CreateOrderModal({ isOpen, onClose, onSuccess }: CreateOrderModalProps)
             </div>
 
             {/* Transaction Flow */}
-            <div className={`mb-5 p-3 rounded-xl border ${isBuyOrder ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+            <div
+              className={`mb-5 p-3 rounded-xl border ${
+                isBuyOrder
+                  ? "bg-green-500/10 border-green-500/30"
+                  : "bg-red-500/10 border-red-500/30"
+              }`}
+            >
               <div className="flex items-center justify-between text-sm">
                 <div className="text-center flex-1">
                   <div className="text-muted text-xs mb-1">You Pay</div>
                   <div className="flex items-center justify-center gap-2">
-                    <img 
-                      src={isBuyOrder ? '/images/usdt-bep20.png' : '/images/dsc-logo.png'} 
-                      alt={isBuyOrder ? 'BEP20' : 'DEP20'} 
+                    <img
+                      src={
+                        isBuyOrder
+                          ? "/images/usdt-bep20.png"
+                          : "/images/dsc-logo.png"
+                      }
+                      alt={isBuyOrder ? "BEP20" : "DEP20"}
                       className="w-6 h-6 rounded-full"
                     />
-                    <span className="text-white font-medium">{isBuyOrder ? 'BEP20' : 'DEP20'}</span>
+                    <span className="text-white font-medium">
+                      {isBuyOrder ? "BEP20" : "DEP20"}
+                    </span>
                   </div>
-                  <div className="text-xs text-muted">{isBuyOrder ? 'BSC Chain' : 'DSC Chain'}</div>
+                  <div className="text-xs text-muted">
+                    {isBuyOrder ? "BSC Chain" : "DSC Chain"}
+                  </div>
                 </div>
                 <div className="text-2xl px-2">→</div>
                 <div className="text-center flex-1">
                   <div className="text-muted text-xs mb-1">You Receive</div>
                   <div className="flex items-center justify-center gap-2">
-                    <img 
-                      src={isBuyOrder ? '/images/dsc-logo.png' : '/images/usdt-bep20.png'} 
-                      alt={isBuyOrder ? 'DEP20' : 'BEP20'} 
+                    <img
+                      src={
+                        isBuyOrder
+                          ? "/images/dsc-logo.png"
+                          : "/images/usdt-bep20.png"
+                      }
+                      alt={isBuyOrder ? "DEP20" : "BEP20"}
                       className="w-6 h-6 rounded-full"
                     />
-                    <span className="text-white font-medium">{isBuyOrder ? 'DEP20' : 'BEP20'}</span>
+                    <span className="text-white font-medium">
+                      {isBuyOrder ? "DEP20" : "BEP20"}
+                    </span>
                   </div>
-                  <div className="text-xs text-muted">{isBuyOrder ? 'DSC Chain' : 'BSC Chain'}</div>
+                  <div className="text-xs text-muted">
+                    {isBuyOrder ? "DSC Chain" : "BSC Chain"}
+                  </div>
                 </div>
               </div>
             </div>
@@ -362,11 +419,15 @@ function CreateOrderModal({ isOpen, onClose, onSuccess }: CreateOrderModalProps)
                   type="text"
                   inputMode="numeric"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))}
+                  onChange={(e) =>
+                    setAmount(e.target.value.replace(/[^0-9.]/g, ""))
+                  }
                   placeholder="0.00"
                   className="w-full bg-surface-light border border-white/10 rounded-xl px-4 py-3 pr-20 text-white text-lg focus:outline-none focus:border-primary"
                 />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-medium">USDT</span>
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-primary font-medium">
+                  USDT
+                </span>
               </div>
             </div>
 
@@ -376,23 +437,35 @@ function CreateOrderModal({ isOpen, onClose, onSuccess }: CreateOrderModalProps)
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-muted">You Pay</span>
                   <div className="flex items-center gap-2">
-                    <img 
-                      src={isBuyOrder ? '/images/usdt-bep20.png' : '/images/dsc-logo.png'} 
-                      alt="" 
+                    <img
+                      src={
+                        isBuyOrder
+                          ? "/images/usdt-bep20.png"
+                          : "/images/dsc-logo.png"
+                      }
+                      alt=""
                       className="w-5 h-5 rounded-full"
                     />
-                    <span className="text-white font-medium">{numAmount} {isBuyOrder ? 'BEP20' : 'DEP20'} USDT</span>
+                    <span className="text-white font-medium">
+                      {numAmount} {isBuyOrder ? "BEP20" : "DEP20"} USDT
+                    </span>
                   </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted">You Receive</span>
                   <div className="flex items-center gap-2">
-                    <img 
-                      src={isBuyOrder ? '/images/dsc-logo.png' : '/images/usdt-bep20.png'} 
-                      alt="" 
+                    <img
+                      src={
+                        isBuyOrder
+                          ? "/images/dsc-logo.png"
+                          : "/images/usdt-bep20.png"
+                      }
+                      alt=""
                       className="w-5 h-5 rounded-full"
                     />
-                    <span className="text-white font-medium">{numAmount} {isBuyOrder ? 'DEP20' : 'BEP20'} USDT</span>
+                    <span className="text-white font-medium">
+                      {numAmount} {isBuyOrder ? "DEP20" : "BEP20"} USDT
+                    </span>
                   </div>
                 </div>
               </div>
@@ -411,108 +484,178 @@ function CreateOrderModal({ isOpen, onClose, onSuccess }: CreateOrderModalProps)
                 onClick={handleEnable}
                 disabled={!amount || parseFloat(amount) <= 0}
                 className={`w-full py-4 rounded-xl font-bold text-lg disabled:opacity-50 ${
-                  isBuyOrder ? 'bg-green-500 hover:bg-green-400 text-white' : 'bg-red-500 hover:bg-red-400 text-white'
+                  isBuyOrder
+                    ? "bg-green-500 hover:bg-green-400 text-white"
+                    : "bg-red-500 hover:bg-red-400 text-white"
                 }`}
               >
-                {`Create ${isBuyOrder ? 'Buy' : 'Sell'} Order`}
+                {`Create ${isBuyOrder ? "Buy" : "Sell"} Order`}
               </button>
             )}
           </>
         )}
 
         {/* Processing Steps */}
-        {(currentStep === 'approving' || currentStep === 'creating' || currentStep === 'done') && (
+        {(currentStep === "approving" ||
+          currentStep === "creating" ||
+          currentStep === "done") && (
           <div className="space-y-4">
             {/* Summary */}
             <div className="bg-surface-light rounded-lg p-3 text-center">
-              <div className="text-lg font-bold text-white">{numAmount} USDT</div>
-              <div className="text-sm text-muted">{isBuyOrder ? 'Buy' : 'Sell'} Order</div>
+              <div className="text-lg font-bold text-white">
+                {numAmount} USDT
+              </div>
+              <div className="text-sm text-muted">
+                {isBuyOrder ? "Buy" : "Sell"} Order
+              </div>
             </div>
-            
+
             {/* Step 1: Enable */}
-            <div className={`p-4 rounded-lg border-2 ${
-              getEnableStatus() === 'done' ? 'border-green-500/50 bg-green-500/10' 
-              : getEnableStatus() === 'signing' || getEnableStatus() === 'confirming' ? 'border-primary/50 bg-primary/10'
-              : 'border-white/10 bg-surface-light'
-            }`}>
+            <div
+              className={`p-4 rounded-lg border-2 ${
+                getEnableStatus() === "done"
+                  ? "border-green-500/50 bg-green-500/10"
+                  : getEnableStatus() === "signing" ||
+                    getEnableStatus() === "confirming"
+                  ? "border-primary/50 bg-primary/10"
+                  : "border-white/10 bg-surface-light"
+              }`}
+            >
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                  getEnableStatus() === 'done' ? 'bg-green-500 text-white' : 'bg-surface text-muted'
-                }`}>
-                  {getEnableStatus() === 'done' ? '✓' : '1'}
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    getEnableStatus() === "done"
+                      ? "bg-green-500 text-white"
+                      : "bg-surface text-muted"
+                  }`}
+                >
+                  {getEnableStatus() === "done" ? "✓" : "1"}
                 </div>
                 <div className="flex-1">
-                  <div className="font-medium text-white">Enable {isBuyOrder ? 'BEP20' : 'DEP20'}</div>
+                  <div className="font-medium text-white">
+                    Enable {isBuyOrder ? "BEP20" : "DEP20"}
+                  </div>
                   <div className="text-xs text-muted">
-                    {getEnableStatus() === 'signing' && '🔐 Sign in wallet...'}
-                    {getEnableStatus() === 'confirming' && '⏳ Confirming...'}
-                    {getEnableStatus() === 'done' && '✅ Approved'}
-                    {getEnableStatus() === 'ready' && 'Approve token spending'}
+                    {getEnableStatus() === "signing" && "🔐 Sign in wallet..."}
+                    {getEnableStatus() === "confirming" && "⏳ Confirming..."}
+                    {getEnableStatus() === "done" && "✅ Approved"}
+                    {getEnableStatus() === "ready" && "Approve token spending"}
                   </div>
                 </div>
-                {(getEnableStatus() === 'signing' || getEnableStatus() === 'confirming') && (
-                  <svg className="animate-spin w-5 h-5 text-primary" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                {(getEnableStatus() === "signing" ||
+                  getEnableStatus() === "confirming") && (
+                  <svg
+                    className="animate-spin w-5 h-5 text-primary"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
                   </svg>
                 )}
               </div>
             </div>
 
             {/* Step 2: Create Order */}
-            <div className={`p-4 rounded-lg border-2 ${
-              getCreateStatus() === 'done' ? 'border-green-500/50 bg-green-500/10' 
-              : getCreateStatus() === 'signing' || getCreateStatus() === 'confirming' ? 'border-primary/50 bg-primary/10'
-              : 'border-white/10 bg-surface-light opacity-50'
-            }`}>
+            <div
+              className={`p-4 rounded-lg border-2 ${
+                getCreateStatus() === "done"
+                  ? "border-green-500/50 bg-green-500/10"
+                  : getCreateStatus() === "signing" ||
+                    getCreateStatus() === "confirming"
+                  ? "border-primary/50 bg-primary/10"
+                  : "border-white/10 bg-surface-light opacity-50"
+              }`}
+            >
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                  getCreateStatus() === 'done' ? 'bg-green-500 text-white' : 'bg-surface text-muted'
-                }`}>
-                  {getCreateStatus() === 'done' ? '✓' : '2'}
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    getCreateStatus() === "done"
+                      ? "bg-green-500 text-white"
+                      : "bg-surface text-muted"
+                  }`}
+                >
+                  {getCreateStatus() === "done" ? "✓" : "2"}
                 </div>
                 <div className="flex-1">
                   <div className="font-medium text-white">Create Order</div>
                   <div className="text-xs text-muted">
-                    {getCreateStatus() === 'signing' && '🔐 Sign in wallet...'}
-                    {getCreateStatus() === 'confirming' && '⏳ Confirming...'}
-                    {getCreateStatus() === 'done' && '✅ Order Created'}
-                    {getCreateStatus() === 'pending' && 'Waiting for approval...'}
+                    {getCreateStatus() === "signing" && "🔐 Sign in wallet..."}
+                    {getCreateStatus() === "confirming" && "⏳ Confirming..."}
+                    {getCreateStatus() === "done" && "✅ Order Created"}
+                    {getCreateStatus() === "pending" &&
+                      "Waiting for approval..."}
                   </div>
                 </div>
-                {(getCreateStatus() === 'signing' || getCreateStatus() === 'confirming') && (
-                  <svg className="animate-spin w-5 h-5 text-primary" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                {(getCreateStatus() === "signing" ||
+                  getCreateStatus() === "confirming") && (
+                  <svg
+                    className="animate-spin w-5 h-5 text-primary"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
                   </svg>
                 )}
               </div>
             </div>
 
             {/* Success */}
-            {currentStep === 'done' && (
+            {currentStep === "done" && (
               <div className="p-4 bg-green-500/20 rounded-lg text-center">
                 <div className="text-3xl mb-2">🎉</div>
-                <div className="text-green-400 font-bold text-lg">Order Created!</div>
-                <div className="text-sm text-muted mt-1">Your {isBuyOrder ? 'buy' : 'sell'} order is now live</div>
+                <div className="text-green-400 font-bold text-lg">
+                  Order Created!
+                </div>
+                <div className="text-sm text-muted mt-1">
+                  Your {isBuyOrder ? "buy" : "sell"} order is now live
+                </div>
               </div>
             )}
           </div>
         )}
 
         {/* Error State */}
-        {currentStep === 'error' && (
+        {currentStep === "error" && (
           <div className="p-4 rounded-lg border-2 border-red-500/50 bg-red-500/10">
-            <div className="text-red-400 font-medium mb-2">Transaction Failed</div>
+            <div className="text-red-400 font-medium mb-2">
+              Transaction Failed
+            </div>
             <div className="text-xs text-red-400/70 mb-3">{errorMessage}</div>
-            <button onClick={handleRetry} className="w-full py-2 rounded-lg font-medium text-white bg-red-500">
+            <button
+              onClick={handleRetry}
+              className="w-full py-2 rounded-lg font-medium text-white bg-red-500"
+            >
               Try Again
             </button>
           </div>
         )}
 
         {/* Done Button */}
-        {currentStep === 'done' && (
+        {currentStep === "done" && (
           <button
             onClick={handleClose}
             className="w-full mt-4 py-3 rounded-xl font-bold text-white bg-green-500 hover:bg-green-400"
@@ -525,14 +668,7 @@ function CreateOrderModal({ isOpen, onClose, onSuccess }: CreateOrderModalProps)
   );
 }
 
-// =============================================================================
-// Constants
-// =============================================================================
 const ORDERS_PER_PAGE = 50;
-
-// =============================================================================
-// Trade Confirmation Modal - Compact design with proper scrolling
-// =============================================================================
 
 interface TradeConfirmModalProps {
   isOpen: boolean;
@@ -544,229 +680,248 @@ interface TradeConfirmModalProps {
     fullAddress?: string;
     amount: string;
     timestamp: number;
-    type: 'buy' | 'sell';
+    type: "buy" | "sell";
     price: string;
   } | null;
-  tradeType: 'buy' | 'sell';
+  tradeType: "buy" | "sell";
   onTradeSuccess?: () => void;
 }
 
 // Inner component that uses hooks
-function TradeConfirmModalInner({ 
-  order, 
-  tradeType, 
-  onClose, 
-  onTradeSuccess 
-}: { 
-  order: NonNullable<TradeConfirmModalProps['order']>;
-  tradeType: 'buy' | 'sell';
+function TradeConfirmModalInner({
+  order,
+  tradeType,
+  onClose,
+  onTradeSuccess,
+}: {
+  order: NonNullable<TradeConfirmModalProps["order"]>;
+  tradeType: "buy" | "sell";
   onClose: () => void;
   onTradeSuccess?: () => void;
 }) {
   const { isConnected, chainId } = useAccount();
   const { openConnectModal } = useConnectModal();
   const { switchChainAsync } = useSwitchChain();
-  
+
   // Step tracking: idle -> approving -> filling -> waiting -> done
-  const [currentStep, setCurrentStep] = useState<'idle' | 'approving' | 'filling' | 'waiting' | 'done' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState('');
+  const [currentStep, setCurrentStep] = useState<
+    "idle" | "approving" | "filling" | "waiting" | "done" | "error"
+  >("idle");
+  const [errorMessage, setErrorMessage] = useState("");
   const [approvalStarted, setApprovalStarted] = useState(false);
   const [fillStarted, setFillStarted] = useState(false);
-  
+
   // Approval transaction
-  const { 
-    data: approveHash, 
-    writeContractAsync: writeApproveAsync, 
+  const {
+    data: approveHash,
+    writeContractAsync: writeApproveAsync,
     isPending: isApprovePending,
     error: approveError,
-    reset: resetApprove 
+    reset: resetApprove,
   } = useWriteContract();
-  
-  const { 
-    isLoading: isApproveConfirming, 
-    isSuccess: isApproveSuccess 
-  } = useWaitForTransactionReceipt({ hash: approveHash });
-  
+
+  const { isLoading: isApproveConfirming, isSuccess: isApproveSuccess } =
+    useWaitForTransactionReceipt({ hash: approveHash });
+
   // Fill transaction
-  const { 
-    data: fillHash, 
-    writeContractAsync: writeFillAsync, 
+  const {
+    data: fillHash,
+    writeContractAsync: writeFillAsync,
     isPending: isFillPending,
     error: fillError,
-    reset: resetFill 
+    reset: resetFill,
   } = useWriteContract();
-  
-  const { 
-    isLoading: isFillConfirming, 
-    isSuccess: isFillSuccess 
-  } = useWaitForTransactionReceipt({ hash: fillHash });
-  
+
+  const { isLoading: isFillConfirming, isSuccess: isFillSuccess } =
+    useWaitForTransactionReceipt({ hash: fillHash });
+
   // Contract addresses - use getContractAddress for proper config
   // When clicking SELL on a BSC buy order -> fill on DSC (send DEP20, get BEP20)
   // When clicking BUY on a DSC sell order -> create buy order on BSC (send BEP20, get DEP20)
-  const isFillingBuyOrder = tradeType === 'sell'; // SELL button fills BSC buy order
+  const isFillingBuyOrder = tradeType === "sell"; // SELL button fills BSC buy order
   const targetChainId = isFillingBuyOrder ? DSC_CHAIN_ID : BSC_CHAIN_ID;
-  const vaultAddress = getContractAddress(targetChainId, 'vault');
-  const usdtAddress = getContractAddress(targetChainId, 'usdt');
-  
+  const vaultAddress = getContractAddress(targetChainId, "vault");
+  const usdtAddress = getContractAddress(targetChainId, "usdt");
+
   // Log addresses for debugging
-  console.log('Trade modal using addresses:', { 
+  console.log("Trade modal using addresses:", {
     tradeType,
     orderType: order.type,
     isFillingBuyOrder,
-    targetChainId, 
-    vaultAddress, 
+    targetChainId,
+    vaultAddress,
     usdtAddress,
   });
-  
+
   const amount = parseFloat(order.amount);
   const amountWei = parseUnits(order.amount, 18);
-  const payToken = isFillingBuyOrder ? 'DEP20 USDT' : 'BEP20 USDT';
-  const payChain = isFillingBuyOrder ? 'DSC' : 'BSC';
-  const receiveToken = isFillingBuyOrder ? 'BEP20 USDT' : 'DEP20 USDT';
-  const receiveChain = isFillingBuyOrder ? 'BSC' : 'DSC';
-  
+  const payToken = isFillingBuyOrder ? "DEP20 USDT" : "BEP20 USDT";
+  const payChain = isFillingBuyOrder ? "DSC" : "BSC";
+  const receiveToken = isFillingBuyOrder ? "BEP20 USDT" : "DEP20 USDT";
+  const receiveChain = isFillingBuyOrder ? "BSC" : "DSC";
+
   // Watch for approval confirmation -> auto trigger fill
   useEffect(() => {
     // Must have a real tx hash (not just success flag)
-    if (approveHash && approveHash !== '0x' && isApproveSuccess && currentStep === 'approving' && !fillStarted) {
-      console.log('Approval confirmed with hash:', approveHash);
+    if (
+      approveHash &&
+      approveHash !== "0x" &&
+      isApproveSuccess &&
+      currentStep === "approving" &&
+      !fillStarted
+    ) {
+      console.log("Approval confirmed with hash:", approveHash);
       setFillStarted(true);
       // Small delay to ensure UI updates
       setTimeout(() => triggerFill(), 1000);
     }
   }, [approveHash, isApproveSuccess, currentStep, fillStarted]);
-  
+
   // Watch for fill success
   useEffect(() => {
     // Must have a real tx hash
-    if (fillHash && fillHash !== '0x' && isFillSuccess && currentStep === 'filling') {
-      console.log('Fill confirmed with hash:', fillHash);
-      setCurrentStep('waiting');
+    if (
+      fillHash &&
+      fillHash !== "0x" &&
+      isFillSuccess &&
+      currentStep === "filling"
+    ) {
+      console.log("Fill confirmed with hash:", fillHash);
+      setCurrentStep("waiting");
       // Poll for relayer completion (in production, actually poll the BSC contract)
       setTimeout(() => {
-        setCurrentStep('done');
+        setCurrentStep("done");
         setTimeout(() => onTradeSuccess?.(), 2000);
       }, 5000);
     }
   }, [fillHash, isFillSuccess, currentStep]);
-  
+
   // Step 1: Handle Enable button click - ASYNC with proper waiting
   const handleEnable = async () => {
     if (!isConnected) {
       openConnectModal?.();
       return;
     }
-    
+
     // Reset any previous state
     resetApprove();
     resetFill();
-    setErrorMessage('');
+    setErrorMessage("");
     setApprovalStarted(true);
     setFillStarted(false);
-    
+
     try {
       // Switch chain if needed
       if (chainId !== targetChainId) {
-        console.log('Switching to chain:', targetChainId);
+        console.log("Switching to chain:", targetChainId);
         await switchChainAsync({ chainId: targetChainId });
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise((r) => setTimeout(r, 1500));
       }
-      
-      setCurrentStep('approving');
-      console.log('Calling approve...', { usdtAddress, vaultAddress, amount: amountWei.toString() });
-      
+
+      setCurrentStep("approving");
+      console.log("Calling approve...", {
+        usdtAddress,
+        vaultAddress,
+        amount: amountWei.toString(),
+      });
+
       // Validate addresses
       if (!usdtAddress || !vaultAddress) {
-        throw new Error('Contract addresses not configured');
+        throw new Error("Contract addresses not configured");
       }
-      
+
       // Call approve and WAIT for wallet signature - this opens the wallet popup
       const txHash = await writeApproveAsync({
         address: usdtAddress,
         abi: [
           {
-            type: 'function',
-            name: 'approve',
+            type: "function",
+            name: "approve",
             inputs: [
-              { name: 'spender', type: 'address' },
-              { name: 'amount', type: 'uint256' },
+              { name: "spender", type: "address" },
+              { name: "amount", type: "uint256" },
             ],
-            outputs: [{ name: '', type: 'bool' }],
-            stateMutability: 'nonpayable',
+            outputs: [{ name: "", type: "bool" }],
+            stateMutability: "nonpayable",
           },
         ],
-        functionName: 'approve',
+        functionName: "approve",
         args: [vaultAddress, amountWei],
         chainId: targetChainId,
       });
-      
-      console.log('Approve tx hash:', txHash);
-      
+
+      console.log("Approve tx hash:", txHash);
+
       if (!txHash) {
-        throw new Error('No transaction hash returned - wallet may have rejected');
+        throw new Error(
+          "No transaction hash returned - wallet may have rejected"
+        );
       }
-      
+
       // Now we have a tx hash, the useWaitForTransactionReceipt will track confirmation
-      console.log('Approve tx submitted, waiting for confirmation...');
-      
+      console.log("Approve tx submitted, waiting for confirmation...");
     } catch (e: unknown) {
-      console.error('Approval error:', e);
-      const errorMsg = e instanceof Error ? e.message : 'Failed to approve';
+      console.error("Approval error:", e);
+      const errorMsg = e instanceof Error ? e.message : "Failed to approve";
       // Check if user rejected
-      if (errorMsg.includes('User rejected') || errorMsg.includes('user rejected') || errorMsg.includes('rejected')) {
-        setErrorMessage('Transaction cancelled by user');
+      if (
+        errorMsg.includes("User rejected") ||
+        errorMsg.includes("user rejected") ||
+        errorMsg.includes("rejected")
+      ) {
+        setErrorMessage("Transaction cancelled by user");
       } else {
         setErrorMessage(errorMsg.slice(0, 150));
       }
-      setCurrentStep('error');
+      setCurrentStep("error");
     }
   };
-  
+
   // Step 2: Trigger fill transaction
   const triggerFill = async () => {
     if (!order.orderId || !order.fullAddress) {
-      setErrorMessage('Missing order data');
-      setCurrentStep('error');
+      setErrorMessage("Missing order data");
+      setCurrentStep("error");
       return;
     }
-    
+
     try {
-      setCurrentStep('filling');
-      
-      const bscOrderId = typeof order.orderId === 'bigint' 
-        ? order.orderId 
-        : BigInt(order.orderId);
+      setCurrentStep("filling");
+
+      const bscOrderId =
+        typeof order.orderId === "bigint"
+          ? order.orderId
+          : BigInt(order.orderId);
       const buyerAddress = order.fullAddress as `0x${string}`;
-      
-      console.log('Calling fillBscBuyOrder...', { 
+
+      console.log("Calling fillBscBuyOrder...", {
         vaultAddress,
-        bscOrderId: bscOrderId.toString(), 
-        buyerAddress, 
+        bscOrderId: bscOrderId.toString(),
+        buyerAddress,
         amount: amountWei.toString(),
-        chainId: targetChainId 
+        chainId: targetChainId,
       });
-      
+
       let fillTxHash: `0x${string}`;
-      
+
       if (isFillingBuyOrder) {
         // SELL button clicked -> Fill BSC buy order on DSC (send DEP20)
         fillTxHash = await writeFillAsync({
           address: vaultAddress,
           abi: [
             {
-              type: 'function',
-              name: 'fillBscBuyOrder',
+              type: "function",
+              name: "fillBscBuyOrder",
               inputs: [
-                { name: 'bscOrderId', type: 'uint256' },
-                { name: 'buyer', type: 'address' },
-                { name: 'amount', type: 'uint256' },
+                { name: "bscOrderId", type: "uint256" },
+                { name: "buyer", type: "address" },
+                { name: "amount", type: "uint256" },
               ],
-              outputs: [{ name: 'orderId', type: 'uint256' }],
-              stateMutability: 'nonpayable',
+              outputs: [{ name: "orderId", type: "uint256" }],
+              stateMutability: "nonpayable",
             },
           ],
-          functionName: 'fillBscBuyOrder',
+          functionName: "fillBscBuyOrder",
           args: [bscOrderId, buyerAddress, amountWei],
           chainId: targetChainId,
         });
@@ -777,187 +932,251 @@ function TradeConfirmModalInner({
           address: vaultAddress,
           abi: [
             {
-              type: 'function',
-              name: 'createBuyOrder',
-              inputs: [{ name: 'amount', type: 'uint256' }],
-              outputs: [{ name: 'orderId', type: 'uint256' }],
-              stateMutability: 'nonpayable',
+              type: "function",
+              name: "createBuyOrder",
+              inputs: [{ name: "amount", type: "uint256" }],
+              outputs: [{ name: "orderId", type: "uint256" }],
+              stateMutability: "nonpayable",
             },
           ],
-          functionName: 'createBuyOrder',
+          functionName: "createBuyOrder",
           args: [amountWei],
           chainId: targetChainId,
         });
       }
-      
-      console.log('Fill tx hash:', fillTxHash);
-      
+
+      console.log("Fill tx hash:", fillTxHash);
+
       if (!fillTxHash) {
-        throw new Error('No transaction hash returned - wallet may have rejected');
+        throw new Error(
+          "No transaction hash returned - wallet may have rejected"
+        );
       }
-      
-      console.log('Fill tx submitted, waiting for confirmation...');
-      
+
+      console.log("Fill tx submitted, waiting for confirmation...");
     } catch (e: unknown) {
-      console.error('Fill error:', e);
-      const errorMsg = e instanceof Error ? e.message : 'Fill transaction failed';
-      if (errorMsg.includes('User rejected') || errorMsg.includes('user rejected') || errorMsg.includes('rejected')) {
-        setErrorMessage('Transaction cancelled by user');
+      console.error("Fill error:", e);
+      const errorMsg =
+        e instanceof Error ? e.message : "Fill transaction failed";
+      if (
+        errorMsg.includes("User rejected") ||
+        errorMsg.includes("user rejected") ||
+        errorMsg.includes("rejected")
+      ) {
+        setErrorMessage("Transaction cancelled by user");
       } else {
         setErrorMessage(errorMsg.slice(0, 150));
       }
-      setCurrentStep('error');
+      setCurrentStep("error");
     }
   };
-  
+
   const handleClose = () => {
-    if (currentStep === 'idle' || currentStep === 'done' || currentStep === 'error') {
+    if (
+      currentStep === "idle" ||
+      currentStep === "done" ||
+      currentStep === "error"
+    ) {
       resetApprove();
       resetFill();
-      setCurrentStep('idle');
-      setErrorMessage('');
+      setCurrentStep("idle");
+      setErrorMessage("");
       setApprovalStarted(false);
       setFillStarted(false);
       onClose();
     }
   };
-  
+
   const handleRetry = () => {
     resetApprove();
     resetFill();
-    setCurrentStep('idle');
-    setErrorMessage('');
+    setCurrentStep("idle");
+    setErrorMessage("");
     setApprovalStarted(false);
     setFillStarted(false);
   };
-  
+
   // Determine step statuses based on current step and tx states
   const getEnableStatus = () => {
-    if (currentStep === 'idle') return 'ready';
-    if (currentStep === 'approving') {
-      if (isApprovePending) return 'signing';
-      if (approveHash && isApproveConfirming) return 'confirming';
-      if (approveHash && isApproveSuccess) return 'done';
-      return 'signing'; // Waiting for wallet
+    if (currentStep === "idle") return "ready";
+    if (currentStep === "approving") {
+      if (isApprovePending) return "signing";
+      if (approveHash && isApproveConfirming) return "confirming";
+      if (approveHash && isApproveSuccess) return "done";
+      return "signing"; // Waiting for wallet
     }
-    if (['filling', 'waiting', 'done'].includes(currentStep)) return 'done';
-    return 'pending';
+    if (["filling", "waiting", "done"].includes(currentStep)) return "done";
+    return "pending";
   };
-  
+
   const getConfirmStatus = () => {
-    if (currentStep === 'idle' || currentStep === 'approving') return 'pending';
-    if (currentStep === 'filling') {
-      if (isFillPending) return 'signing';
-      if (fillHash && isFillConfirming) return 'confirming';
-      if (fillHash && isFillSuccess) return 'done';
-      return 'signing'; // Waiting for wallet
+    if (currentStep === "idle" || currentStep === "approving") return "pending";
+    if (currentStep === "filling") {
+      if (isFillPending) return "signing";
+      if (fillHash && isFillConfirming) return "confirming";
+      if (fillHash && isFillSuccess) return "done";
+      return "signing"; // Waiting for wallet
     }
-    if (['waiting', 'done'].includes(currentStep)) return 'done';
-    return 'pending';
+    if (["waiting", "done"].includes(currentStep)) return "done";
+    return "pending";
   };
-  
+
   const getReceiveStatus = () => {
-    if (currentStep === 'waiting') return 'waiting';
-    if (currentStep === 'done') return 'done';
-    return 'pending';
+    if (currentStep === "waiting") return "waiting";
+    if (currentStep === "done") return "done";
+    return "pending";
   };
-  
-  const isProcessing = !['idle', 'done', 'error'].includes(currentStep);
+
+  const isProcessing = !["idle", "done", "error"].includes(currentStep);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div 
+      <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={!isProcessing ? handleClose : undefined}
       />
-      
+
       <div className="relative bg-surface border border-white/10 rounded-xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
-        
         {/* Header */}
-        <div className={`p-4 border-b border-white/10 flex items-center justify-between ${isFillingBuyOrder ? 'bg-red-500/10' : 'bg-green-500/10'}`}>
+        <div
+          className={`p-4 border-b border-white/10 flex items-center justify-between ${
+            isFillingBuyOrder ? "bg-red-500/10" : "bg-green-500/10"
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <span className="text-xl">{isFillingBuyOrder ? '🔴' : '🟢'}</span>
+            <span className="text-xl">{isFillingBuyOrder ? "🔴" : "🟢"}</span>
             <h2 className="text-lg font-bold text-white">
-              {isFillingBuyOrder ? 'Sell' : 'Buy'} DEP20 USDT
+              {isFillingBuyOrder ? "Sell" : "Buy"} DEP20 USDT
             </h2>
           </div>
           {!isProcessing && (
-            <button onClick={handleClose} className="text-muted hover:text-white p-1">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <button
+              onClick={handleClose}
+              className="text-muted hover:text-white p-1"
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           )}
         </div>
 
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
-          
           {/* Trade Summary */}
           <div className="bg-surface-light rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div className="text-center flex-1">
                 <div className="text-xs text-muted mb-1">You Pay</div>
                 <div className="flex items-center justify-center gap-2">
-                  <img 
-                    src={isFillingBuyOrder ? '/images/dsc-logo.png' : '/images/usdt-bep20.png'} 
-                    alt={payToken} 
+                  <img
+                    src={
+                      isFillingBuyOrder
+                        ? "/images/dsc-logo.png"
+                        : "/images/usdt-bep20.png"
+                    }
+                    alt={payToken}
                     className="w-6 h-6 rounded-full"
                   />
-                  <span className="text-lg font-bold text-red-400">{amount}</span>
+                  <span className="text-lg font-bold text-red-400">
+                    {amount}
+                  </span>
                 </div>
-                <div className="text-xs text-muted">{payToken} ({payChain})</div>
+                <div className="text-xs text-muted">
+                  {payToken} ({payChain})
+                </div>
               </div>
               <div className="px-3 text-2xl">→</div>
               <div className="text-center flex-1">
                 <div className="text-xs text-muted mb-1">You Receive</div>
                 <div className="flex items-center justify-center gap-2">
-                  <img 
-                    src={isFillingBuyOrder ? '/images/usdt-bep20.png' : '/images/dsc-logo.png'} 
-                    alt={receiveToken} 
+                  <img
+                    src={
+                      isFillingBuyOrder
+                        ? "/images/usdt-bep20.png"
+                        : "/images/dsc-logo.png"
+                    }
+                    alt={receiveToken}
                     className="w-6 h-6 rounded-full"
                   />
-                  <span className="text-lg font-bold text-green-400">{amount}</span>
+                  <span className="text-lg font-bold text-green-400">
+                    {amount}
+                  </span>
                 </div>
-                <div className="text-xs text-muted">{receiveToken} ({receiveChain})</div>
+                <div className="text-xs text-muted">
+                  {receiveToken} ({receiveChain})
+                </div>
               </div>
             </div>
             {/* Action type indicator */}
-            <div className={`mt-3 pt-3 border-t border-white/10 text-center text-xs ${isFillingBuyOrder ? 'text-red-400' : 'text-green-400'}`}>
-              {isFillingBuyOrder 
-                ? '✅ Direct fill - Instant execution' 
-                : '⚡ Creates matching order - Relayer executes in ~30s'}
+            <div
+              className={`mt-3 pt-3 border-t border-white/10 text-center text-xs ${
+                isFillingBuyOrder ? "text-red-400" : "text-green-400"
+              }`}
+            >
+              {isFillingBuyOrder
+                ? "✅ Direct fill - Instant execution"
+                : "⚡ Creates matching order - Relayer executes in ~30s"}
             </div>
           </div>
 
           {/* Step 1: Enable */}
-          <div className={`p-4 rounded-lg border-2 transition-all ${
-            getEnableStatus() === 'done' ? 'border-green-500/50 bg-green-500/10' 
-            : getEnableStatus() === 'signing' || getEnableStatus() === 'confirming' ? 'border-primary/50 bg-primary/10'
-            : 'border-white/10 bg-surface-light'
-          }`}>
+          <div
+            className={`p-4 rounded-lg border-2 transition-all ${
+              getEnableStatus() === "done"
+                ? "border-green-500/50 bg-green-500/10"
+                : getEnableStatus() === "signing" ||
+                  getEnableStatus() === "confirming"
+                ? "border-primary/50 bg-primary/10"
+                : "border-white/10 bg-surface-light"
+            }`}
+          >
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                getEnableStatus() === 'done' ? 'bg-green-500 text-white' : 'bg-surface text-muted'
-              }`}>
-                {getEnableStatus() === 'done' ? '✓' : '1'}
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  getEnableStatus() === "done"
+                    ? "bg-green-500 text-white"
+                    : "bg-surface text-muted"
+                }`}
+              >
+                {getEnableStatus() === "done" ? "✓" : "1"}
               </div>
               <div className="flex-1">
                 <div className="font-medium text-white">Enable {payToken}</div>
                 <div className="text-xs text-muted">
-                  {getEnableStatus() === 'signing' && '🔐 Sign in wallet...'}
-                  {getEnableStatus() === 'confirming' && '⏳ Confirming on chain...'}
-                  {getEnableStatus() === 'done' && '✅ Approved'}
-                  {getEnableStatus() === 'ready' && 'Approve token spending'}
+                  {getEnableStatus() === "signing" && "🔐 Sign in wallet..."}
+                  {getEnableStatus() === "confirming" &&
+                    "⏳ Confirming on chain..."}
+                  {getEnableStatus() === "done" && "✅ Approved"}
+                  {getEnableStatus() === "ready" && "Approve token spending"}
                 </div>
               </div>
-              {approveHash && getEnableStatus() === 'confirming' && (
-                <a href={`${isFillingBuyOrder ? 'https://dscscan.io' : 'https://bscscan.com'}/tx/${approveHash}`}
-                   target="_blank" className="text-xs text-primary">View</a>
+              {approveHash && getEnableStatus() === "confirming" && (
+                <a
+                  href={`${
+                    isFillingBuyOrder
+                      ? "https://dscscan.io"
+                      : "https://bscscan.com"
+                  }/tx/${approveHash}`}
+                  target="_blank"
+                  className="text-xs text-primary"
+                >
+                  View
+                </a>
               )}
             </div>
-            
-            {currentStep === 'idle' && (
-              !isConnected ? (
+
+            {currentStep === "idle" &&
+              (!isConnected ? (
                 <button
                   onClick={() => openConnectModal?.()}
                   className="w-full mt-3 py-3 rounded-lg font-bold text-white bg-primary hover:bg-primary/80"
@@ -971,87 +1190,169 @@ function TradeConfirmModalInner({
                 >
                   {`Enable ${payToken}`}
                 </button>
-              )
-            )}
-            
-            {(getEnableStatus() === 'signing' || getEnableStatus() === 'confirming') && (
+              ))}
+
+            {(getEnableStatus() === "signing" ||
+              getEnableStatus() === "confirming") && (
               <div className="mt-3 flex items-center justify-center gap-2 text-primary">
                 <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
-                <span className="text-sm">{getEnableStatus() === 'signing' ? 'Check wallet...' : 'Confirming...'}</span>
+                <span className="text-sm">
+                  {getEnableStatus() === "signing"
+                    ? "Check wallet..."
+                    : "Confirming..."}
+                </span>
               </div>
             )}
           </div>
 
           {/* Step 2: Confirm */}
-          <div className={`p-4 rounded-lg border-2 transition-all ${
-            getConfirmStatus() === 'done' ? 'border-green-500/50 bg-green-500/10' 
-            : getConfirmStatus() === 'signing' || getConfirmStatus() === 'confirming' ? 'border-primary/50 bg-primary/10'
-            : 'border-white/10 bg-surface-light opacity-50'
-          }`}>
+          <div
+            className={`p-4 rounded-lg border-2 transition-all ${
+              getConfirmStatus() === "done"
+                ? "border-green-500/50 bg-green-500/10"
+                : getConfirmStatus() === "signing" ||
+                  getConfirmStatus() === "confirming"
+                ? "border-primary/50 bg-primary/10"
+                : "border-white/10 bg-surface-light opacity-50"
+            }`}
+          >
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                getConfirmStatus() === 'done' ? 'bg-green-500 text-white' : 'bg-surface text-muted'
-              }`}>
-                {getConfirmStatus() === 'done' ? '✓' : '2'}
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  getConfirmStatus() === "done"
+                    ? "bg-green-500 text-white"
+                    : "bg-surface text-muted"
+                }`}
+              >
+                {getConfirmStatus() === "done" ? "✓" : "2"}
               </div>
               <div className="flex-1">
-                <div className="font-medium text-white">Confirm {isFillingBuyOrder ? 'Sell' : 'Buy'}</div>
+                <div className="font-medium text-white">
+                  Confirm {isFillingBuyOrder ? "Sell" : "Buy"}
+                </div>
                 <div className="text-xs text-muted">
-                  {getConfirmStatus() === 'signing' && '🔐 Sign in wallet...'}
-                  {getConfirmStatus() === 'confirming' && '⏳ Confirming on chain...'}
-                  {getConfirmStatus() === 'done' && '✅ Confirmed'}
-                  {getConfirmStatus() === 'pending' && 'Waiting for approval...'}
+                  {getConfirmStatus() === "signing" && "🔐 Sign in wallet..."}
+                  {getConfirmStatus() === "confirming" &&
+                    "⏳ Confirming on chain..."}
+                  {getConfirmStatus() === "done" && "✅ Confirmed"}
+                  {getConfirmStatus() === "pending" &&
+                    "Waiting for approval..."}
                 </div>
               </div>
-              {fillHash && getConfirmStatus() === 'confirming' && (
-                <a href={`${isFillingBuyOrder ? 'https://dscscan.io' : 'https://bscscan.com'}/tx/${fillHash}`}
-                   target="_blank" className="text-xs text-primary">View</a>
+              {fillHash && getConfirmStatus() === "confirming" && (
+                <a
+                  href={`${
+                    isFillingBuyOrder
+                      ? "https://dscscan.io"
+                      : "https://bscscan.com"
+                  }/tx/${fillHash}`}
+                  target="_blank"
+                  className="text-xs text-primary"
+                >
+                  View
+                </a>
               )}
             </div>
-            
-            {(getConfirmStatus() === 'signing' || getConfirmStatus() === 'confirming') && (
+
+            {(getConfirmStatus() === "signing" ||
+              getConfirmStatus() === "confirming") && (
               <div className="mt-3 flex items-center justify-center gap-2 text-primary">
                 <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
-                <span className="text-sm">{getConfirmStatus() === 'signing' ? 'Check wallet...' : 'Confirming...'}</span>
+                <span className="text-sm">
+                  {getConfirmStatus() === "signing"
+                    ? "Check wallet..."
+                    : "Confirming..."}
+                </span>
               </div>
             )}
           </div>
 
           {/* Step 3: Receive */}
-          <div className={`p-4 rounded-lg border-2 transition-all ${
-            getReceiveStatus() === 'done' ? 'border-green-500/50 bg-green-500/10' 
-            : getReceiveStatus() === 'waiting' ? 'border-yellow-500/50 bg-yellow-500/10'
-            : 'border-white/10 bg-surface-light opacity-50'
-          }`}>
+          <div
+            className={`p-4 rounded-lg border-2 transition-all ${
+              getReceiveStatus() === "done"
+                ? "border-green-500/50 bg-green-500/10"
+                : getReceiveStatus() === "waiting"
+                ? "border-yellow-500/50 bg-yellow-500/10"
+                : "border-white/10 bg-surface-light opacity-50"
+            }`}
+          >
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                getReceiveStatus() === 'done' ? 'bg-green-500 text-white' : 'bg-surface text-muted'
-              }`}>
-                {getReceiveStatus() === 'done' ? '✓' : '3'}
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                  getReceiveStatus() === "done"
+                    ? "bg-green-500 text-white"
+                    : "bg-surface text-muted"
+                }`}
+              >
+                {getReceiveStatus() === "done" ? "✓" : "3"}
               </div>
               <div className="flex-1">
-                <div className="font-medium text-white">Receive {receiveToken}</div>
+                <div className="font-medium text-white">
+                  Receive {receiveToken}
+                </div>
                 <div className="text-xs text-muted">
-                  {getReceiveStatus() === 'waiting' && '⏳ Relayer completing trade...'}
-                  {getReceiveStatus() === 'done' && `✅ ${amount} ${receiveToken} received!`}
-                  {getReceiveStatus() === 'pending' && `Automatic via relayer`}
+                  {getReceiveStatus() === "waiting" &&
+                    "⏳ Relayer completing trade..."}
+                  {getReceiveStatus() === "done" &&
+                    `✅ ${amount} ${receiveToken} received!`}
+                  {getReceiveStatus() === "pending" && `Automatic via relayer`}
                 </div>
               </div>
-              {getReceiveStatus() === 'waiting' && (
-                <svg className="animate-spin w-5 h-5 text-yellow-500" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              {getReceiveStatus() === "waiting" && (
+                <svg
+                  className="animate-spin w-5 h-5 text-yellow-500"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                    fill="none"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
               )}
             </div>
-            
-            {getReceiveStatus() === 'done' && (
+
+            {getReceiveStatus() === "done" && (
               <div className="mt-3 p-3 bg-green-500/20 rounded-lg text-center">
                 <div className="text-2xl mb-1">🎉</div>
                 <div className="text-green-400 font-bold">Trade Complete!</div>
@@ -1060,20 +1361,30 @@ function TradeConfirmModalInner({
           </div>
 
           {/* Error */}
-          {currentStep === 'error' && (
+          {currentStep === "error" && (
             <div className="p-4 rounded-lg border-2 border-red-500/50 bg-red-500/10">
-              <div className="text-red-400 font-medium mb-2">Transaction Failed</div>
-              <div className="text-xs text-red-400/70 mb-3 break-words">{errorMessage}</div>
-              <button onClick={handleRetry} className="w-full py-2 rounded-lg font-medium text-white bg-red-500">
+              <div className="text-red-400 font-medium mb-2">
+                Transaction Failed
+              </div>
+              <div className="text-xs text-red-400/70 mb-3 break-words">
+                {errorMessage}
+              </div>
+              <button
+                onClick={handleRetry}
+                className="w-full py-2 rounded-lg font-medium text-white bg-red-500"
+              >
                 Try Again
               </button>
             </div>
           )}
         </div>
 
-        {currentStep === 'done' && (
+        {currentStep === "done" && (
           <div className="p-4 border-t border-white/10">
-            <button onClick={handleClose} className="w-full py-3 rounded-lg font-bold text-white bg-green-500">
+            <button
+              onClick={handleClose}
+              className="w-full py-3 rounded-lg font-bold text-white bg-green-500"
+            >
               Done
             </button>
           </div>
@@ -1083,22 +1394,24 @@ function TradeConfirmModalInner({
   );
 }
 
-function TradeConfirmModal({ isOpen, onClose, order, tradeType, onTradeSuccess }: TradeConfirmModalProps) {
+function TradeConfirmModal({
+  isOpen,
+  onClose,
+  order,
+  tradeType,
+  onTradeSuccess,
+}: TradeConfirmModalProps) {
   if (!isOpen || !order) return null;
-  
+
   return (
-    <TradeConfirmModalInner 
-      order={order} 
-      tradeType={tradeType} 
-      onClose={onClose} 
-      onTradeSuccess={onTradeSuccess} 
+    <TradeConfirmModalInner
+      order={order}
+      tradeType={tradeType}
+      onClose={onClose}
+      onTradeSuccess={onTradeSuccess}
     />
   );
 }
-
-// =============================================================================
-// Cancel Order Confirmation Modal
-// =============================================================================
 
 interface CancelOrderModalProps {
   isOpen: boolean;
@@ -1108,7 +1421,7 @@ interface CancelOrderModalProps {
     userAddress: string;
     amount: string;
     timestamp: number;
-    type: 'buy' | 'sell';
+    type: "buy" | "sell";
     price: string;
     status?: string;
     orderId?: any;
@@ -1118,26 +1431,33 @@ interface CancelOrderModalProps {
   onCancelSuccess: () => void;
 }
 
-function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrderModalProps) {
+function CancelOrderModal({
+  isOpen,
+  onClose,
+  order,
+  onCancelSuccess,
+}: CancelOrderModalProps) {
   const { isConnected } = useAccount();
   const { openConnectModal } = useConnectModal();
-  const [step, setStep] = useState<'confirm' | 'processing' | 'success' | 'error'>('confirm');
-  const [errorMessage, setErrorMessage] = useState('');
-  
+  const [step, setStep] = useState<
+    "confirm" | "processing" | "success" | "error"
+  >("confirm");
+  const [errorMessage, setErrorMessage] = useState("");
+
   // Use cancel hooks directly for BSC and DSC
   const cancelBsc = useCancelBscOrder();
   const cancelDsc = useCancelDscOrder();
-  
+
   // Determine which cancel hook to use based on order type
-  const isBscOrder = order?.type === 'buy';
+  const isBscOrder = order?.type === "buy";
   const cancelHook = isBscOrder ? cancelBsc : cancelDsc;
   const txHash = cancelHook.hash;
 
   // Reset step when modal opens
   useEffect(() => {
     if (isOpen) {
-      setStep('confirm');
-      setErrorMessage('');
+      setStep("confirm");
+      setErrorMessage("");
       cancelBsc.reset();
       cancelDsc.reset();
     }
@@ -1145,17 +1465,17 @@ function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrd
 
   // Watch for transaction success
   useEffect(() => {
-    if (step === 'processing') {
+    if (step === "processing") {
       if (cancelHook.isSuccess) {
-        setStep('success');
+        setStep("success");
         // After 2 seconds, close modal and refresh orders
         setTimeout(() => {
           onCancelSuccess();
           onClose();
         }, 2000);
       } else if (cancelHook.error) {
-        setErrorMessage(cancelHook.error.message || 'Transaction failed');
-        setStep('error');
+        setErrorMessage(cancelHook.error.message || "Transaction failed");
+        setStep("error");
       }
     }
   }, [cancelHook.isSuccess, cancelHook.error, step, onCancelSuccess, onClose]);
@@ -1163,41 +1483,48 @@ function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrd
   if (!isOpen || !order) return null;
 
   const amount = parseFloat(order.amount);
-  const chain = order.type === 'buy' ? 'BSC' : 'DSC';
-  const token = order.type === 'buy' ? 'BEP20 USDT' : 'DEP20 USDT';
+  const chain = order.type === "buy" ? "BSC" : "DSC";
+  const token = order.type === "buy" ? "BEP20 USDT" : "DEP20 USDT";
 
   const handleConfirmCancel = async () => {
     if (!order.orderId) {
-      setErrorMessage('Order ID not found');
-      setStep('error');
+      setErrorMessage("Order ID not found");
+      setStep("error");
       return;
     }
 
-    setStep('processing');
-    
+    setStep("processing");
+
     try {
       const orderId = BigInt(order.orderId);
-      
-      console.log('Cancelling order on chain:', chain, 'orderId:', orderId.toString());
-      
+
+      console.log(
+        "Cancelling order on chain:",
+        chain,
+        "orderId:",
+        orderId.toString()
+      );
+
       // Call the actual smart contract cancel function
       if (isBscOrder) {
         await cancelBsc.cancelOrder(orderId);
       } else {
         await cancelDsc.cancelSellOrder(orderId);
       }
-      
+
       // Transaction submitted, wait for confirmation via useEffect
     } catch (error) {
-      console.error('Error cancelling order:', error);
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to cancel order');
-      setStep('error');
+      console.error("Error cancelling order:", error);
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to cancel order"
+      );
+      setStep("error");
     }
   };
 
   const handleClose = () => {
-    if (step !== 'processing') {
-      setStep('confirm');
+    if (step !== "processing") {
+      setStep("confirm");
       cancelBsc.reset();
       cancelDsc.reset();
       onClose();
@@ -1206,23 +1533,22 @@ function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrd
 
   // Determine processing status text
   const getProcessingStatus = () => {
-    if (cancelHook.isPending) return 'Waiting for wallet approval...';
-    if (cancelHook.isConfirming) return 'Confirming on blockchain...';
-    return 'Preparing transaction...';
+    if (cancelHook.isPending) return "Waiting for wallet approval...";
+    if (cancelHook.isConfirming) return "Confirming on blockchain...";
+    return "Preparing transaction...";
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={step === 'confirm' ? handleClose : undefined}
+        onClick={step === "confirm" ? handleClose : undefined}
       />
-      
+
       {/* Modal */}
       <div className="relative bg-surface border border-white/10 rounded-xl w-full max-w-md shadow-2xl">
-        
-        {step === 'confirm' && (
+        {step === "confirm" && (
           <>
             {/* Header */}
             <div className="p-4 border-b border-white/10 bg-orange-500/10 flex items-center justify-between">
@@ -1230,9 +1556,22 @@ function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrd
                 <span className="text-xl">⚠️</span>
                 <h2 className="text-lg font-bold text-white">Cancel Order</h2>
               </div>
-              <button onClick={handleClose} className="text-muted hover:text-white p-1">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <button
+                onClick={handleClose}
+                className="text-muted hover:text-white p-1"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
@@ -1241,37 +1580,51 @@ function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrd
             <div className="p-4 space-y-4">
               {/* Order Details */}
               <div className="bg-surface-light rounded-lg p-4 space-y-3">
-                <div className="text-xs text-muted uppercase tracking-wider mb-2">Order Details</div>
-                
+                <div className="text-xs text-muted uppercase tracking-wider mb-2">
+                  Order Details
+                </div>
+
                 <div className="flex justify-between items-center">
                   <span className="text-muted">Chain</span>
-                  <span className={`px-2 py-0.5 rounded text-sm font-medium ${
-                    order.type === 'buy' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                  }`}>
+                  <span
+                    className={`px-2 py-0.5 rounded text-sm font-medium ${
+                      order.type === "buy"
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-red-500/20 text-red-400"
+                    }`}
+                  >
                     {chain}
                   </span>
                 </div>
-                
+
                 <div className="flex justify-between items-center">
                   <span className="text-muted">Amount</span>
                   <div className="flex items-center gap-2">
-                    <img 
-                      src={order.type === 'buy' ? '/images/usdt-bep20.png' : '/images/dsc-logo.png'} 
-                      alt="" 
+                    <img
+                      src={
+                        order.type === "buy"
+                          ? "/images/usdt-bep20.png"
+                          : "/images/dsc-logo.png"
+                      }
+                      alt=""
                       className="w-5 h-5 rounded-full"
                     />
-                    <span className="text-white font-semibold">{amount.toLocaleString()} {token}</span>
+                    <span className="text-white font-semibold">
+                      {amount.toLocaleString()} {token}
+                    </span>
                   </div>
                 </div>
-                
+
                 <div className="flex justify-between items-center">
                   <span className="text-muted">Price</span>
                   <span className="text-white">${order.price}</span>
                 </div>
-                
+
                 <div className="flex justify-between items-center">
                   <span className="text-muted">Total Value</span>
-                  <span className="text-primary font-bold">${(amount * parseFloat(order.price)).toLocaleString()}</span>
+                  <span className="text-primary font-bold">
+                    ${(amount * parseFloat(order.price)).toLocaleString()}
+                  </span>
                 </div>
               </div>
 
@@ -1279,8 +1632,13 @@ function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrd
               <div className="flex items-start gap-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
                 <span className="text-orange-400 text-lg">⚠️</span>
                 <div className="text-sm text-orange-200/80">
-                  <p className="font-medium mb-1">Are you sure you want to cancel this order?</p>
-                  <p className="text-xs text-orange-200/60">Your locked funds will be returned to your wallet after cancellation.</p>
+                  <p className="font-medium mb-1">
+                    Are you sure you want to cancel this order?
+                  </p>
+                  <p className="text-xs text-orange-200/60">
+                    Your locked funds will be returned to your wallet after
+                    cancellation.
+                  </p>
                 </div>
               </div>
             </div>
@@ -1312,21 +1670,42 @@ function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrd
           </>
         )}
 
-        {step === 'processing' && (
+        {step === "processing" && (
           <div className="p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-orange-500/20 flex items-center justify-center">
-              <svg className="animate-spin w-8 h-8 text-orange-400" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              <svg
+                className="animate-spin w-8 h-8 text-orange-400"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  fill="none"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
               </svg>
             </div>
-            <h3 className="text-lg font-bold text-white mb-1">Cancelling Order</h3>
+            <h3 className="text-lg font-bold text-white mb-1">
+              Cancelling Order
+            </h3>
             <p className="text-sm text-muted mb-2">{getProcessingStatus()}</p>
             {txHash && (
               <div className="mt-3 p-2 bg-surface rounded-lg">
                 <p className="text-xs text-muted mb-1">Transaction Hash:</p>
-                <a 
-                  href={`${order?.type === 'buy' ? 'https://bscscan.com' : 'https://dscscan.io'}/tx/${txHash}`}
+                <a
+                  href={`${
+                    order?.type === "buy"
+                      ? "https://bscscan.com"
+                      : "https://dscscan.io"
+                  }/tx/${txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-primary hover:underline break-all"
@@ -1338,39 +1717,59 @@ function CancelOrderModal({ isOpen, onClose, order, onCancelSuccess }: CancelOrd
           </div>
         )}
 
-        {step === 'success' && (
+        {step === "success" && (
           <div className="p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
               <span className="text-3xl">✅</span>
             </div>
-            <h3 className="text-lg font-bold text-white mb-1">Order Cancelled!</h3>
-            <p className="text-sm text-muted mb-2">Your order has been cancelled successfully.</p>
-            <p className="text-xs text-green-400 mb-3">Funds have been returned to your wallet.</p>
+            <h3 className="text-lg font-bold text-white mb-1">
+              Order Cancelled!
+            </h3>
+            <p className="text-sm text-muted mb-2">
+              Your order has been cancelled successfully.
+            </p>
+            <p className="text-xs text-green-400 mb-3">
+              Funds have been returned to your wallet.
+            </p>
             {txHash && (
-              <a 
-                href={`${order?.type === 'buy' ? 'https://bscscan.com' : 'https://dscscan.io'}/tx/${txHash}`}
+              <a
+                href={`${
+                  order?.type === "buy"
+                    ? "https://bscscan.com"
+                    : "https://dscscan.io"
+                }/tx/${txHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-block text-xs text-primary hover:underline"
               >
-                View on {order?.type === 'buy' ? 'BSCScan' : 'DSCScan'} →
+                View on {order?.type === "buy" ? "BSCScan" : "DSCScan"} →
               </a>
             )}
           </div>
         )}
 
-        {step === 'error' && (
+        {step === "error" && (
           <div className="p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/20 flex items-center justify-center">
               <span className="text-3xl">❌</span>
             </div>
-            <h3 className="text-lg font-bold text-white mb-1">Cancellation Failed</h3>
-            <p className="text-sm text-muted mb-4">{errorMessage || 'Failed to cancel order. Please try again.'}</p>
+            <h3 className="text-lg font-bold text-white mb-1">
+              Cancellation Failed
+            </h3>
+            <p className="text-sm text-muted mb-4">
+              {errorMessage || "Failed to cancel order. Please try again."}
+            </p>
             <div className="flex gap-2">
-              <button onClick={handleClose} className="flex-1 py-3 rounded-lg font-medium text-muted bg-surface border border-white/10">
+              <button
+                onClick={handleClose}
+                className="flex-1 py-3 rounded-lg font-medium text-muted bg-surface border border-white/10"
+              >
                 Close
               </button>
-              <button onClick={() => setStep('confirm')} className="flex-1 py-3 rounded-lg font-bold text-white bg-orange-500">
+              <button
+                onClick={() => setStep("confirm")}
+                className="flex-1 py-3 rounded-lg font-bold text-white bg-orange-500"
+              >
                 Retry
               </button>
             </div>
@@ -1391,35 +1790,43 @@ interface OrderRowProps {
     userAddress: string;
     amount: string;
     timestamp: number;
-    type: 'buy' | 'sell';
+    type: "buy" | "sell";
     price: string;
     status?: string;
   };
   index: number;
-  activeTab: 'buy' | 'sell';
+  activeTab: "buy" | "sell";
   isConnected: boolean;
   isMyOrders: boolean;
-  onTradeClick: (order: OrderRowProps['order']) => void;
-  onCancelClick?: (order: OrderRowProps['order']) => void;
+  onTradeClick: (order: OrderRowProps["order"]) => void;
+  onCancelClick?: (order: OrderRowProps["order"]) => void;
 }
 
-function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeClick, onCancelClick }: OrderRowProps) {
+function OrderRow({
+  order,
+  index,
+  activeTab,
+  isConnected,
+  isMyOrders,
+  onTradeClick,
+  onCancelClick,
+}: OrderRowProps) {
   // Action/Status button component
-  const ActionButton = () => (
+  const ActionButton = () =>
     isMyOrders ? (
       // My Orders - show status or cancel button
-      order.status === 'OPEN' ? (
+      order.status === "OPEN" ? (
         <button
           onClick={() => onCancelClick?.(order)}
           className="px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 bg-orange-500 hover:bg-orange-400 text-white shadow-lg shadow-orange-500/20"
         >
           Cancel
         </button>
-      ) : order.status === 'COMPLETED' ? (
+      ) : order.status === "COMPLETED" ? (
         <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-green-500/20 text-green-400">
           Success
         </span>
-      ) : order.status === 'CANCELLED' ? (
+      ) : order.status === "CANCELLED" ? (
         <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/20 text-red-400">
           Cancelled
         </span>
@@ -1433,15 +1840,14 @@ function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeCli
       <button
         onClick={() => onTradeClick(order)}
         className={`px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 ${
-          activeTab === 'buy'
-            ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20'
-            : 'bg-green-500 hover:bg-green-400 text-white shadow-lg shadow-green-500/20'
+          activeTab === "buy"
+            ? "bg-red-500 hover:bg-red-400 text-white shadow-lg shadow-red-500/20"
+            : "bg-green-500 hover:bg-green-400 text-white shadow-lg shadow-green-500/20"
         }`}
       >
-        {activeTab === 'buy' ? 'SELL' : 'BUY'}
+        {activeTab === "buy" ? "SELL" : "BUY"}
       </button>
-    )
-  );
+    );
 
   return (
     <>
@@ -1452,16 +1858,16 @@ function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeCli
       >
         {/* User Address + Order Type */}
         <div className="col-span-4 flex items-center gap-2">
-          {order.type === 'buy' ? (
-            <img 
-              src="/images/usdt-bep20.png" 
-              alt="BEP20 USDT" 
+          {order.type === "buy" ? (
+            <img
+              src="/images/usdt-bep20.png"
+              alt="BEP20 USDT"
               className="w-8 h-8 rounded-full"
             />
           ) : (
-            <img 
-              src="/images/dsc-logo.png" 
-              alt="DEP20 USDT" 
+            <img
+              src="/images/dsc-logo.png"
+              alt="DEP20 USDT"
               className="w-8 h-8 rounded-full"
             />
           )}
@@ -1470,8 +1876,12 @@ function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeCli
               {order.userAddress}
             </span>
             {isMyOrders && (
-              <span className={`text-xs font-bold ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-                {order.type === 'buy' ? '↓ BUY Order' : '↑ SELL Order'}
+              <span
+                className={`text-xs font-bold ${
+                  order.type === "buy" ? "text-green-400" : "text-red-400"
+                }`}
+              >
+                {order.type === "buy" ? "↓ BUY Order" : "↑ SELL Order"}
               </span>
             )}
           </div>
@@ -1482,8 +1892,12 @@ function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeCli
           <span className="font-semibold text-white">
             {Number(order.amount).toLocaleString()}
           </span>
-          <span className={`text-xs ml-1 ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-            {order.type === 'buy' ? 'BEP20 USDT' : 'DEP20 USDT'}
+          <span
+            className={`text-xs ml-1 ${
+              order.type === "buy" ? "text-green-400" : "text-red-400"
+            }`}
+          >
+            {order.type === "buy" ? "BEP20 USDT" : "DEP20 USDT"}
           </span>
         </div>
 
@@ -1514,16 +1928,16 @@ function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeCli
           {/* Top Row - User & Type Badge */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              {order.type === 'buy' ? (
-                <img 
-                  src="/images/usdt-bep20.png" 
-                  alt="BEP20 USDT" 
+              {order.type === "buy" ? (
+                <img
+                  src="/images/usdt-bep20.png"
+                  alt="BEP20 USDT"
                   className="w-10 h-10 rounded-full"
                 />
               ) : (
-                <img 
-                  src="/images/dsc-logo.png" 
-                  alt="DEP20 USDT" 
+                <img
+                  src="/images/dsc-logo.png"
+                  alt="DEP20 USDT"
                   className="w-10 h-10 rounded-full"
                 />
               )}
@@ -1531,8 +1945,12 @@ function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeCli
                 <span className="font-mono text-sm text-white/80">
                   {order.userAddress}
                 </span>
-                <span className={`text-xs font-bold ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-                  {order.type === 'buy' ? '↓ BUY Order' : '↑ SELL Order'}
+                <span
+                  className={`text-xs font-bold ${
+                    order.type === "buy" ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {order.type === "buy" ? "↓ BUY Order" : "↑ SELL Order"}
                 </span>
               </div>
             </div>
@@ -1547,14 +1965,20 @@ function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeCli
               <div className="text-xs text-muted mb-1">Amount</div>
               <div className="font-semibold text-white text-lg">
                 {Number(order.amount).toLocaleString()}
-                <span className={`text-xs ml-1 ${order.type === 'buy' ? 'text-green-400' : 'text-red-400'}`}>
-                  {order.type === 'buy' ? 'BEP20' : 'DEP20'}
+                <span
+                  className={`text-xs ml-1 ${
+                    order.type === "buy" ? "text-green-400" : "text-red-400"
+                  }`}
+                >
+                  {order.type === "buy" ? "BEP20" : "DEP20"}
                 </span>
               </div>
             </div>
             <div className="text-right">
               <div className="text-xs text-muted mb-1">Price</div>
-              <div className="font-semibold text-white text-lg">${order.price}</div>
+              <div className="font-semibold text-white text-lg">
+                ${order.price}
+              </div>
             </div>
           </div>
 
@@ -1571,7 +1995,7 @@ function OrderRow({ order, index, activeTab, isConnected, isMyOrders, onTradeCli
 // Format time ago
 function formatTimeAgo(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  
+
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
@@ -1580,147 +2004,189 @@ function formatTimeAgo(timestamp: number): string {
 
 export default function HomePage() {
   const { isConnected, address } = useAccount();
-  const [activeTab, setActiveTab] = useState<'buy' | 'sell'>('buy');
+  const [activeTab, setActiveTab] = useState<"buy" | "sell">("buy");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [minAmount, setMinAmount] = useState('');
-  const [maxAmount, setMaxAmount] = useState('');
+  const [minAmount, setMinAmount] = useState("");
+  const [maxAmount, setMaxAmount] = useState("");
   const [showMyOrders, setShowMyOrders] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'success' | 'cancel'>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'buy' | 'sell'>('all');
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "pending" | "success" | "cancel"
+  >("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "buy" | "sell">("all");
   const listRef = useRef<HTMLDivElement>(null);
-  
+
   // =============================================================================
   // Real Data Hooks - Fetch from blockchain and database
   // =============================================================================
-  
+
   // P2P Integration - Smart contract interactions (only for creating orders, not reading)
   const p2p = useP2PIntegration();
-  
+
   // Database hooks for stats
   const { stats, loading: loadingStats } = useDbStats();
-  
+
   // Fetch ALL orders from database (not just OPEN - includes all statuses)
   // Include OPEN and MATCHED/MAKER_LOCKED/TAKER_LOCKED orders for buy/sell display
-  const { orders: dbOrders, loading: loadingDbOrders, refetch: refetchDbOrders, totalLocked: dbTotalLocked } = useDbOrders({
+  const {
+    orders: dbOrders,
+    loading: loadingDbOrders,
+    refetch: refetchDbOrders,
+    totalLocked: dbTotalLocked,
+  } = useDbOrders({
     limit: 200, // Get more orders
-    status: 'all', // Get all statuses, we'll filter for locked ones
+    status: "all", // Get all statuses, we'll filter for locked ones
   });
-  
+
   // Fetch user's orders from database
-  const { orders: userDbOrders, loading: loadingUserDbOrders, refetch: refetchUserDbOrders } = useDbOrders(
-    address ? {
-      maker: address,
-      limit: 200,
-    } : undefined
+  const {
+    orders: userDbOrders,
+    loading: loadingUserDbOrders,
+    refetch: refetchUserDbOrders,
+  } = useDbOrders(
+    address
+      ? {
+          maker: address,
+          limit: 200,
+        }
+      : undefined
   );
-  
+
   // Map database orders to display format (for public order book)
   const publicOrders = (dbOrders || []).map((order: any, index: number) => ({
     id: `db-${index}`,
-    userAddress: `${order.maker?.slice(0, 6)}...${order.maker?.slice(-4)}` || 'Unknown',
-    fullAddress: order.maker || '',
-    status: order.status || 'OPEN',
-    amount: formatUnits(BigInt(order.sellAmount || '0'), 18),
-    timestamp: order.createdAt ? new Date(order.createdAt).getTime() : Date.now(),
-    type: order.srcChainId === BSC_CHAIN_ID ? 'buy' : 'sell', // BSC orders are buy orders
-    price: '1.0000',
-    orderId: BigInt(order.orderId || '0'),
+    userAddress:
+      `${order.maker?.slice(0, 6)}...${order.maker?.slice(-4)}` || "Unknown",
+    fullAddress: order.maker || "",
+    status: order.status || "OPEN",
+    amount: formatUnits(BigInt(order.sellAmount || "0"), 18),
+    timestamp: order.createdAt
+      ? new Date(order.createdAt).getTime()
+      : Date.now(),
+    type: order.srcChainId === BSC_CHAIN_ID ? "buy" : "sell", // BSC orders are buy orders
+    price: "1.0000",
+    orderId: BigInt(order.orderId || "0"),
     dbId: order.id,
-    chainId: order.srcChainId || (order.srcChainId === BSC_CHAIN_ID ? BSC_CHAIN_ID : DSC_CHAIN_ID),
+    chainId:
+      order.srcChainId ||
+      (order.srcChainId === BSC_CHAIN_ID ? BSC_CHAIN_ID : DSC_CHAIN_ID),
   }));
-  
+
   // Map user orders from database to display format (for My Orders tab)
   const myOrders = (userDbOrders || []).map((order: any, index: number) => ({
     id: `user-${index}`,
-    userAddress: `${order.maker?.slice(0, 6)}...${order.maker?.slice(-4)}` || 'Unknown',
-    fullAddress: order.maker || '',
-    status: order.status || 'OPEN',
-    amount: formatUnits(BigInt(order.sellAmount || '0'), 18),
-    timestamp: order.createdAt ? new Date(order.createdAt).getTime() : Date.now(),
-    type: order.srcChainId === BSC_CHAIN_ID ? 'buy' : 'sell',
-    price: '1.0000',
-    orderId: BigInt(order.orderId || '0'),
+    userAddress:
+      `${order.maker?.slice(0, 6)}...${order.maker?.slice(-4)}` || "Unknown",
+    fullAddress: order.maker || "",
+    status: order.status || "OPEN",
+    amount: formatUnits(BigInt(order.sellAmount || "0"), 18),
+    timestamp: order.createdAt
+      ? new Date(order.createdAt).getTime()
+      : Date.now(),
+    type: order.srcChainId === BSC_CHAIN_ID ? "buy" : "sell",
+    price: "1.0000",
+    orderId: BigInt(order.orderId || "0"),
     dbId: order.id,
-    chainId: order.srcChainId || (order.srcChainId === BSC_CHAIN_ID ? BSC_CHAIN_ID : DSC_CHAIN_ID),
+    chainId:
+      order.srcChainId ||
+      (order.srcChainId === BSC_CHAIN_ID ? BSC_CHAIN_ID : DSC_CHAIN_ID),
   }));
-  
+
   // Filter My Orders based on status and type dropdown
-  const filteredMyOrders = myOrders.filter(order => {
+  const filteredMyOrders = myOrders.filter((order) => {
     // Status filter
     let statusMatch = true;
-    if (statusFilter === 'pending') statusMatch = order.status === 'OPEN' || order.status === 'PARTIALLY_FILLED';
-    else if (statusFilter === 'success') statusMatch = order.status === 'COMPLETED';
-    else if (statusFilter === 'cancel') statusMatch = order.status === 'CANCELLED';
-    
+    if (statusFilter === "pending")
+      statusMatch =
+        order.status === "OPEN" || order.status === "PARTIALLY_FILLED";
+    else if (statusFilter === "success")
+      statusMatch = order.status === "COMPLETED";
+    else if (statusFilter === "cancel")
+      statusMatch = order.status === "CANCELLED";
+
     // Type filter
     let typeMatch = true;
-    if (typeFilter === 'buy') typeMatch = order.type === 'buy';
-    else if (typeFilter === 'sell') typeMatch = order.type === 'sell';
-    
+    if (typeFilter === "buy") typeMatch = order.type === "buy";
+    else if (typeFilter === "sell") typeMatch = order.type === "sell";
+
     return statusMatch && typeMatch;
   });
-  
+
   // Display orders based on current view
   // For public orders, show OPEN and MATCHED/MAKER_LOCKED/TAKER_LOCKED (locked orders)
-  const displayedOrders = showMyOrders 
+  const displayedOrders = showMyOrders
     ? filteredMyOrders
-    : publicOrders.filter(order => {
+    : publicOrders.filter((order) => {
         if (order.type !== activeTab) return false;
         // Show OPEN and locked orders (MATCHED/MAKER_LOCKED/TAKER_LOCKED)
-        return order.status === 'OPEN' || 
-               order.status === 'MAKER_LOCKED' || 
-               order.status === 'TAKER_LOCKED' ||
-               order.status === 'MATCHED';
+        return (
+          order.status === "OPEN" ||
+          order.status === "MAKER_LOCKED" ||
+          order.status === "TAKER_LOCKED" ||
+          order.status === "MATCHED"
+        );
       });
-  
+
   // Fetch actual locked amount from contract for the active chain
   const [chainLockedAmount, setChainLockedAmount] = useState<number>(0);
   const [loadingLockedAmount, setLoadingLockedAmount] = useState(false);
-  
+
   useEffect(() => {
     const fetchLockedAmount = async () => {
       if (showMyOrders) return; // Don't fetch for My Orders tab
-      
-      const activeChainId = activeTab === 'buy' ? BSC_CHAIN_ID : DSC_CHAIN_ID;
+
+      const activeChainId = activeTab === "buy" ? BSC_CHAIN_ID : DSC_CHAIN_ID;
       setLoadingLockedAmount(true);
       try {
-        const response = await fetch(`/api/p2p/locked-amount?chainId=${activeChainId}`);
+        const response = await fetch(
+          `/api/p2p/locked-amount?chainId=${activeChainId}`
+        );
         if (response.ok) {
           const data = await response.json();
-          setChainLockedAmount(parseFloat(data.totalLocked || '0'));
+          setChainLockedAmount(parseFloat(data.totalLocked || "0"));
         }
       } catch (error) {
-        console.error('Error fetching locked amount:', error);
+        console.error("Error fetching locked amount:", error);
       } finally {
         setLoadingLockedAmount(false);
       }
     };
-    
+
     fetchLockedAmount();
     // Refetch every 10 seconds
     const interval = setInterval(fetchLockedAmount, 10000);
     return () => clearInterval(interval);
   }, [activeTab, showMyOrders]);
-  
+
   // Use contract locked amount if available, otherwise calculate from displayed orders
-  const displayedTotalLocked = showMyOrders 
+  const displayedTotalLocked = showMyOrders
     ? displayedOrders.reduce((sum, order) => {
-        if (order.status === 'OPEN' || order.status === 'MAKER_LOCKED' || order.status === 'TAKER_LOCKED') {
+        if (
+          order.status === "OPEN" ||
+          order.status === "MAKER_LOCKED" ||
+          order.status === "TAKER_LOCKED"
+        ) {
           return sum + parseFloat(order.amount);
         }
         return sum;
       }, 0)
-    : chainLockedAmount || displayedOrders.reduce((sum, order) => {
-        if (order.status === 'OPEN' || order.status === 'MAKER_LOCKED' || order.status === 'TAKER_LOCKED') {
+    : chainLockedAmount ||
+      displayedOrders.reduce((sum, order) => {
+        if (
+          order.status === "OPEN" ||
+          order.status === "MAKER_LOCKED" ||
+          order.status === "TAKER_LOCKED"
+        ) {
           return sum + parseFloat(order.amount);
         }
         return sum;
       }, 0);
-  
-  const totalOrders = showMyOrders ? (userDbOrders?.length || 0) : displayedOrders.length;
+
+  const totalOrders = showMyOrders
+    ? userDbOrders?.length || 0
+    : displayedOrders.length;
   const hasMoreOrders = false; // Database fetches all at once
   const isLoadingMore = loadingDbOrders || loadingUserDbOrders;
-  
+
   // Trade confirmation modal state
   const [selectedOrder, setSelectedOrder] = useState<{
     id: number;
@@ -1728,7 +2194,7 @@ export default function HomePage() {
     fullAddress?: string;
     amount: string;
     timestamp: number;
-    type: 'buy' | 'sell';
+    type: "buy" | "sell";
     price: string;
     status?: string;
     orderId?: any;
@@ -1737,7 +2203,7 @@ export default function HomePage() {
   } | null>(null);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
-  
+
   const handleTradeClick = (order: typeof selectedOrder) => {
     setSelectedOrder(order);
     setIsTradeModalOpen(true);
@@ -1757,9 +2223,9 @@ export default function HomePage() {
   };
 
   // Handle create order - calls smart contract
-  const handleCreateOrder = async (type: 'buy' | 'sell', amount: string) => {
+  const handleCreateOrder = async (type: "buy" | "sell", amount: string) => {
     try {
-      if (type === 'buy') {
+      if (type === "buy") {
         await p2p.handleCreateBuyOrder(amount);
       } else {
         await p2p.handleCreateSellOrder(amount);
@@ -1768,7 +2234,7 @@ export default function HomePage() {
       refetchDbOrders();
       refetchUserDbOrders();
     } catch (error) {
-      console.error('Error creating order:', error);
+      console.error("Error creating order:", error);
       throw error;
     }
   };
@@ -1789,14 +2255,18 @@ export default function HomePage() {
       const scrollTop = window.scrollY;
       const scrollHeight = document.documentElement.scrollHeight;
       const clientHeight = window.innerHeight;
-      
-      if (scrollHeight - scrollTop - clientHeight < 200 && hasMoreOrders && !isLoadingMore) {
+
+      if (
+        scrollHeight - scrollTop - clientHeight < 200 &&
+        hasMoreOrders &&
+        !isLoadingMore
+      ) {
         loadMoreOrders();
       }
     };
 
-    window.addEventListener('scroll', handleWindowScroll);
-    return () => window.removeEventListener('scroll', handleWindowScroll);
+    window.addEventListener("scroll", handleWindowScroll);
+    return () => window.removeEventListener("scroll", handleWindowScroll);
   }, [loadMoreOrders, hasMoreOrders, isLoadingMore]);
 
   // Get stats for display
@@ -1805,15 +2275,15 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Create Order Modal */}
-      <CreateOrderModal 
-        isOpen={isCreateModalOpen} 
+      <CreateOrderModal
+        isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={() => {
           refetchDbOrders();
           refetchUserDbOrders();
         }}
       />
-      
+
       {/* Trade Confirmation Modal */}
       <TradeConfirmModal
         isOpen={isTradeModalOpen}
@@ -1822,7 +2292,7 @@ export default function HomePage() {
           setSelectedOrder(null);
         }}
         order={selectedOrder}
-        tradeType={activeTab === 'buy' ? 'sell' : 'buy'}
+        tradeType={activeTab === "buy" ? "sell" : "buy"}
         onTradeSuccess={() => {
           refetchDbOrders();
           refetchUserDbOrders();
@@ -1869,14 +2339,14 @@ export default function HomePage() {
             onClick={() => {
               setShowMyOrders(!showMyOrders);
               if (showMyOrders) {
-                setTypeFilter('all');
-                setStatusFilter('all');
+                setTypeFilter("all");
+                setStatusFilter("all");
               }
             }}
             className={`px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
               showMyOrders
-                ? 'bg-secondary text-white'
-                : 'bg-surface text-muted hover:bg-surface-light border border-white/10'
+                ? "bg-secondary text-white"
+                : "bg-surface text-muted hover:bg-surface-light border border-white/10"
             }`}
           >
             📋 My Orders
@@ -1885,7 +2355,7 @@ export default function HomePage() {
           {/* Trade History Button */}
           <button
             onClick={() => {
-              window.location.href = '/trade-history';
+              window.location.href = "/trade-history";
             }}
             className="px-4 py-3 rounded-xl font-medium transition-all duration-200 bg-surface text-muted hover:bg-surface-light border border-white/10"
           >
@@ -1894,92 +2364,100 @@ export default function HomePage() {
 
           {/* Amount Range Filter */}
           <div className="flex items-center gap-2 bg-surface rounded-xl px-3 py-2 border border-white/10">
-              <span className="text-muted text-sm">Amount:</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Min"
-                value={minAmount}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/[^0-9.]/g, '');
-                  setMinAmount(val);
-                }}
-                className="w-20 bg-surface-light border border-white/10 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary"
-              />
-              <span className="text-muted">-</span>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Max"
-                value={maxAmount}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/[^0-9.]/g, '');
-                  setMaxAmount(val);
-                }}
-                className="w-20 bg-surface-light border border-white/10 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary"
-              />
-            </div>
+            <span className="text-muted text-sm">Amount:</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="Min"
+              value={minAmount}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9.]/g, "");
+                setMinAmount(val);
+              }}
+              className="w-20 bg-surface-light border border-white/10 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary"
+            />
+            <span className="text-muted">-</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              placeholder="Max"
+              value={maxAmount}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9.]/g, "");
+                setMaxAmount(val);
+              }}
+              className="w-20 bg-surface-light border border-white/10 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-primary"
+            />
+          </div>
 
           {/* Spacer */}
           <div className="flex-1" />
 
           {/* Buy/Sell Tabs */}
           <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setActiveTab('buy');
-                  setShowMyOrders(false);
-                }}
-                className={`px-6 py-3 rounded-xl font-bold transition-all duration-200 ${
-                  !showMyOrders && activeTab === 'buy'
-                    ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
-                    : 'bg-surface-light text-muted hover:bg-surface-lighter'
-                }`}
-              >
-                🟢 BUY
-              </button>
-              <button
-                onClick={() => {
-                  setActiveTab('sell');
-                  setShowMyOrders(false);
-                }}
-                className={`px-6 py-3 rounded-xl font-bold transition-all duration-200 ${
-                  !showMyOrders && activeTab === 'sell'
-                    ? 'bg-red-500 text-white shadow-lg shadow-red-500/30'
-                    : 'bg-surface-light text-muted hover:bg-surface-lighter'
-                }`}
-              >
-                🔴 SELL
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                setActiveTab("buy");
+                setShowMyOrders(false);
+              }}
+              className={`px-6 py-3 rounded-xl font-bold transition-all duration-200 ${
+                !showMyOrders && activeTab === "buy"
+                  ? "bg-green-500 text-white shadow-lg shadow-green-500/30"
+                  : "bg-surface-light text-muted hover:bg-surface-lighter"
+              }`}
+            >
+              🟢 BUY
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("sell");
+                setShowMyOrders(false);
+              }}
+              className={`px-6 py-3 rounded-xl font-bold transition-all duration-200 ${
+                !showMyOrders && activeTab === "sell"
+                  ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
+                  : "bg-surface-light text-muted hover:bg-surface-lighter"
+              }`}
+            >
+              🔴 SELL
+            </button>
+          </div>
         </div>
 
         {/* Stats Section */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-surface rounded-xl p-3 border border-white/5 text-center">
             <div className="text-xl font-bold text-red-400">
-              {isLoadingMore ? '...' : publicOrders.filter(o => o.type === 'sell').length}
+              {isLoadingMore
+                ? "..."
+                : publicOrders.filter((o) => o.type === "sell").length}
             </div>
             <div className="text-xs text-muted">DSC Sell Orders</div>
           </div>
           <div className="bg-surface rounded-xl p-3 border border-white/5 text-center">
             <div className="text-xl font-bold text-green-400">
-              {isLoadingMore ? '...' : publicOrders.filter(o => o.type === 'buy').length}
+              {isLoadingMore
+                ? "..."
+                : publicOrders.filter((o) => o.type === "buy").length}
             </div>
             <div className="text-xs text-muted">BSC Buy Orders</div>
           </div>
           <div className="bg-surface rounded-xl p-3 border border-white/5 text-center">
             <div className="text-xl font-bold text-primary">
-              {loadingStats ? '...' : (() => {
-                const volume = platformStats?.totalVolume ? parseFloat(platformStats.totalVolume) : 0;
-                if (volume >= 1000000) {
-                  return `$${(volume / 1000000).toFixed(2)}M`;
-                } else if (volume >= 1000) {
-                  return `$${(volume / 1000).toFixed(2)}K`;
-                } else {
-                  return `$${volume.toFixed(2)}`;
-                }
-              })()}
+              {loadingStats
+                ? "..."
+                : (() => {
+                    const volume = platformStats?.totalVolume
+                      ? parseFloat(platformStats.totalVolume)
+                      : 0;
+                    if (volume >= 1000000) {
+                      return `$${(volume / 1000000).toFixed(2)}M`;
+                    } else if (volume >= 1000) {
+                      return `$${(volume / 1000).toFixed(2)}K`;
+                    } else {
+                      return `$${volume.toFixed(2)}`;
+                    }
+                  })()}
             </div>
             <div className="text-xs text-muted">Total Volume</div>
           </div>
@@ -1990,40 +2468,41 @@ export default function HomePage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h2 className="font-semibold text-white">
-                {showMyOrders 
-                  ? '📋 My Orders' 
-                  : (activeTab === 'buy' ? '📈 BEP20 USDT Orders (BSC Chain)' : '📉 DEP20 USDT Orders (DSC Chain)')
-                }
+                {showMyOrders
+                  ? "📋 My Orders"
+                  : activeTab === "buy"
+                  ? "📈 BEP20 USDT Orders (BSC Chain)"
+                  : "📉 DEP20 USDT Orders (DSC Chain)"}
               </h2>
               {/* BUY/SELL Filter - Only show when My Orders is active */}
               {showMyOrders && (
                 <div className="flex gap-1">
                   <button
-                    onClick={() => setTypeFilter('all')}
+                    onClick={() => setTypeFilter("all")}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      typeFilter === 'all' 
-                        ? 'bg-primary text-white' 
-                        : 'bg-surface-light text-muted hover:text-white'
+                      typeFilter === "all"
+                        ? "bg-primary text-white"
+                        : "bg-surface-light text-muted hover:text-white"
                     }`}
                   >
                     ALL
                   </button>
                   <button
-                    onClick={() => setTypeFilter('buy')}
+                    onClick={() => setTypeFilter("buy")}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      typeFilter === 'buy' 
-                        ? 'bg-green-500 text-white' 
-                        : 'bg-surface-light text-muted hover:text-white'
+                      typeFilter === "buy"
+                        ? "bg-green-500 text-white"
+                        : "bg-surface-light text-muted hover:text-white"
                     }`}
                   >
                     BUY
                   </button>
                   <button
-                    onClick={() => setTypeFilter('sell')}
+                    onClick={() => setTypeFilter("sell")}
                     className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                      typeFilter === 'sell' 
-                        ? 'bg-red-500 text-white' 
-                        : 'bg-surface-light text-muted hover:text-white'
+                      typeFilter === "sell"
+                        ? "bg-red-500 text-white"
+                        : "bg-surface-light text-muted hover:text-white"
                     }`}
                   >
                     SELL
@@ -2044,7 +2523,11 @@ export default function HomePage() {
               {showMyOrders && (
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as 'all' | 'pending' | 'success' | 'cancel')}
+                  onChange={(e) =>
+                    setStatusFilter(
+                      e.target.value as "all" | "pending" | "success" | "cancel"
+                    )
+                  }
                   className="bg-surface-light border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-primary"
                 >
                   <option value="all">All Status</option>
@@ -2058,62 +2541,76 @@ export default function HomePage() {
         </div>
 
         {/* Table Header - Hidden on Mobile */}
-            <div className="hidden md:grid bg-surface-light border-x border-white/5 px-4 py-3 grid-cols-12 gap-4 text-xs text-muted uppercase tracking-wider">
-              <div className="col-span-4">{showMyOrders ? 'User / Type' : 'User'}</div>
-              <div className="col-span-2 text-right">Amount</div>
-              <div className="col-span-2 text-right">Price</div>
-              <div className="col-span-2 text-center">Time</div>
-              <div className="col-span-2 text-center">{showMyOrders ? 'Status' : 'Action'}</div>
-            </div>
+        <div className="hidden md:grid bg-surface-light border-x border-white/5 px-4 py-3 grid-cols-12 gap-4 text-xs text-muted uppercase tracking-wider">
+          <div className="col-span-4">
+            {showMyOrders ? "User / Type" : "User"}
+          </div>
+          <div className="col-span-2 text-right">Amount</div>
+          <div className="col-span-2 text-right">Price</div>
+          <div className="col-span-2 text-center">Time</div>
+          <div className="col-span-2 text-center">
+            {showMyOrders ? "Status" : "Action"}
+          </div>
+        </div>
 
-            {/* Order List with Infinite Scroll */}
-            <div className="bg-surface border border-white/5 rounded-b-xl overflow-hidden">
-              <div 
-                ref={listRef}
-                className="divide-y divide-white/5"
-              >
-                {displayedOrders.map((order, index) => (
-                  <OrderRow 
-                    key={order.id} 
-                    order={order} 
-                    index={index} 
-                    activeTab={activeTab}
-                    isConnected={isConnected}
-                    isMyOrders={showMyOrders}
-                    onTradeClick={handleTradeClick}
-                    onCancelClick={handleCancelClick}
-                  />
-                ))}
-                
-                {/* Loading indicator */}
-                {isLoadingMore && (
-                  <div className="px-4 py-6 text-center">
-                    <div className="inline-flex items-center gap-2 text-muted">
-                      <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
-                      Loading more orders...
-                    </div>
-                  </div>
-                )}
-                
-                {/* Empty state */}
-                {!isLoadingMore && displayedOrders.length === 0 && (
-                  <div className="px-4 py-8 text-center text-muted">
-                    {showMyOrders ? 'No orders found' : `No ${activeTab} orders available`}
-                  </div>
-                )}
-                
-                {/* End of list indicator */}
-                {!hasMoreOrders && displayedOrders.length > 0 && (
-                  <div className="px-4 py-4 text-center text-muted text-sm">
-                    ✓ All {totalOrders} orders loaded
-                  </div>
-                )}
+        {/* Order List with Infinite Scroll */}
+        <div className="bg-surface border border-white/5 rounded-b-xl overflow-hidden">
+          <div ref={listRef} className="divide-y divide-white/5">
+            {displayedOrders.map((order, index) => (
+              <OrderRow
+                key={order.id}
+                order={order}
+                index={index}
+                activeTab={activeTab}
+                isConnected={isConnected}
+                isMyOrders={showMyOrders}
+                onTradeClick={handleTradeClick}
+                onCancelClick={handleCancelClick}
+              />
+            ))}
+
+            {/* Loading indicator */}
+            {isLoadingMore && (
+              <div className="px-4 py-6 text-center">
+                <div className="inline-flex items-center gap-2 text-muted">
+                  <svg className="animate-spin w-5 h-5" viewBox="0 0 24 24">
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                      fill="none"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  Loading more orders...
+                </div>
               </div>
-            </div>
+            )}
 
+            {/* Empty state */}
+            {!isLoadingMore && displayedOrders.length === 0 && (
+              <div className="px-4 py-8 text-center text-muted">
+                {showMyOrders
+                  ? "No orders found"
+                  : `No ${activeTab} orders available`}
+              </div>
+            )}
+
+            {/* End of list indicator */}
+            {!hasMoreOrders && displayedOrders.length > 0 && (
+              <div className="px-4 py-4 text-center text-muted text-sm">
+                ✓ All {totalOrders} orders loaded
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

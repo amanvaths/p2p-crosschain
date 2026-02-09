@@ -254,6 +254,7 @@ Indexer Service (index.ts)
 **Purpose**: Main trading interface with buy/sell tabs
 
 **Key Features**:
+
 - Display public orders (from database)
 - Filter by type (buy/sell), chain, amount
 - Create new orders (modal)
@@ -262,11 +263,12 @@ Indexer Service (index.ts)
 - Display total locked amount per chain
 
 **Data Flow**:
+
 ```typescript
 // Fetch orders from database
 const { orders: dbOrders } = useDbOrders({
   limit: 200,
-  status: 'all',
+  status: "all",
 });
 
 // Fetch stats
@@ -275,12 +277,13 @@ const { stats } = useDbStats();
 // Fetch locked amount from contract
 useEffect(() => {
   fetch(`/api/p2p/locked-amount?chainId=${activeChainId}`)
-    .then(res => res.json())
-    .then(data => setChainLockedAmount(data.totalLocked));
+    .then((res) => res.json())
+    .then((data) => setChainLockedAmount(data.totalLocked));
 }, [activeTab]);
 ```
 
 **Key Functions**:
+
 - `handleCreateOrder()`: Approve USDT → Create order transaction
 - `handleCancelOrder()`: Cancel order transaction
 - `handleTradeClick()`: Open trade modal (for future implementation)
@@ -290,6 +293,7 @@ useEffect(() => {
 **Purpose**: Display all orders with detailed trade information
 
 **Key Features**:
+
 - Show all orders (all statuses)
 - Filter by status, type, chain
 - Display maker and taker addresses
@@ -299,6 +303,7 @@ useEffect(() => {
 - Pagination
 
 **Data Display**:
+
 - **Maker**: Order creator address
 - **Taker**: Counterparty address (extracted from OrderMatched events)
 - **Chains**: Source → Destination (e.g., BSC → DSC)
@@ -309,6 +314,7 @@ useEffect(() => {
 **Purpose**: Modal for creating new buy/sell orders
 
 **Flow**:
+
 1. User selects order type (buy/sell)
 2. User enters amount
 3. System checks if wallet is connected
@@ -325,6 +331,7 @@ useEffect(() => {
 **Purpose**: Fetch orders from database with filters
 
 **Query Parameters**:
+
 - `status`: Order status (OPEN, COMPLETED, etc.) or 'all'
 - `chainId`: Filter by chain (56 for BSC, 1555 for DSC)
 - `maker`: Filter by maker address
@@ -333,6 +340,7 @@ useEffect(() => {
 - `minAmount` / `maxAmount`: Amount filters
 
 **Response**:
+
 ```json
 {
   "orders": [
@@ -373,6 +381,7 @@ useEffect(() => {
 ```
 
 **Processing Logic**:
+
 1. Query database with filters
 2. Include related events and escrows
 3. For MATCHED/MAKER_LOCKED orders: Fetch remaining amount from contract
@@ -385,9 +394,11 @@ useEffect(() => {
 **Purpose**: Get platform or user statistics
 
 **Query Parameters**:
+
 - `address` (optional): User address for user-specific stats
 
 **Response (Platform)**:
+
 ```json
 {
   "totalOrders": 9,
@@ -400,6 +411,7 @@ useEffect(() => {
 ```
 
 **Response (User)**:
+
 ```json
 {
   "user": {
@@ -419,9 +431,11 @@ useEffect(() => {
 **Purpose**: Get total locked amount from contract (real-time)
 
 **Query Parameters**:
+
 - `chainId`: Chain ID (56 for BSC, 1555 for DSC)
 
 **Response**:
+
 ```json
 {
   "chainId": 56,
@@ -430,6 +444,7 @@ useEffect(() => {
 ```
 
 **Processing**:
+
 1. Create public client for chain
 2. Call `contract.totalLocked()` function
 3. Convert from wei to USDT (divide by 1e18)
@@ -441,11 +456,13 @@ useEffect(() => {
 **Purpose**: Continuously index blockchain events and update database
 
 **Key Functions**:
+
 - `main()`: Main loop that polls chains
 - `syncChain()`: Sync blocks for a specific chain
 - `handleReorg()`: Detect and handle chain reorganizations
 
 **Polling Strategy**:
+
 - Polls every 3-5 seconds (configurable)
 - Processes blocks in batches (max 5000 blocks per query)
 - Handles large block ranges by splitting into smaller chunks
@@ -458,19 +475,23 @@ useEffect(() => {
 **Event Types**:
 
 1. **OrderCreated**:
+
    - Creates order record in database
    - Status: OPEN
    - Updates user stats (ordersCreated++)
 
 2. **OrderMatched**:
+
    - Updates order status: OPEN → MAKER_LOCKED
    - Links event to order
 
 3. **OrderCompleted**:
+
    - Updates order status: MAKER_LOCKED → COMPLETED
    - Updates user stats (ordersCompleted++, totalVolume)
 
 4. **OrderCancelled**:
+
    - Updates order status: OPEN → CANCELLED
    - Updates cancelled flag
 
@@ -478,6 +499,7 @@ useEffect(() => {
    - Updates order status: → REFUNDED
 
 **Processing Flow**:
+
 ```typescript
 1. Decode event log (Viem)
 2. Store raw event in database
@@ -491,6 +513,7 @@ useEffect(() => {
 **Purpose**: Handle RPC and database connections with retry logic
 
 **Features**:
+
 - Automatic reconnection on failure
 - Exponential backoff retry
 - Health monitoring
@@ -507,6 +530,7 @@ useEffect(() => {
 Stores all orders from both chains.
 
 **Key Fields**:
+
 - `orderId`: On-chain order ID (BigInt, unique)
 - `chainId`: Chain where order was created
 - `maker`: Order creator address
@@ -517,6 +541,7 @@ Stores all orders from both chains.
 - `blockNumber` / `logIndex`: Block and log index for event
 
 **Relations**:
+
 - `events`: All events related to this order
 - `escrows`: Escrow locks for this order
 
@@ -525,6 +550,7 @@ Stores all orders from both chains.
 Stores raw blockchain events for reorg tolerance.
 
 **Key Fields**:
+
 - `eventName`: Event name (OrderCreated, OrderMatched, etc.)
 - `txHash`: Transaction hash
 - `blockNumber` / `blockHash`: Block information
@@ -533,6 +559,7 @@ Stores raw blockchain events for reorg tolerance.
 - `removed`: For reorg handling
 
 **Relations**:
+
 - `order`: Optional relation to order (via orderId)
 
 #### 3. **IndexerState** (`indexer_states`)
@@ -540,6 +567,7 @@ Stores raw blockchain events for reorg tolerance.
 Tracks indexer progress per chain.
 
 **Key Fields**:
+
 - `chainId`: Chain ID (unique)
 - `lastBlockNumber`: Last indexed block
 - `lastBlockHash`: Hash of last indexed block (for reorg detection)
@@ -549,6 +577,7 @@ Tracks indexer progress per chain.
 Tracks user statistics.
 
 **Key Fields**:
+
 - `address`: User wallet address (unique)
 - `ordersCreated`: Number of orders created
 - `ordersCompleted`: Number of orders completed
@@ -563,12 +592,14 @@ Tracks user statistics.
 **Purpose**: Vault contract on BSC for buy orders
 
 **Key Functions**:
+
 - `createBuyOrder(amount)`: Create a buy order (locks USDT)
 - `cancelOrder(orderId)`: Cancel an order (refunds USDT)
 - `getOrder(orderId)`: Get order details
 - `totalLocked()`: Get total locked USDT
 
 **Order Structure**:
+
 ```solidity
 struct Order {
     address user;
@@ -582,6 +613,7 @@ struct Order {
 ```
 
 **Events**:
+
 - `OrderCreated(orderId, user, orderType, amount, expiresAt)`
 - `OrderFilled(bscOrderId, dscOrderId, filler, amount, isPartial)`
 - `OrderCompleted(orderId, user, totalAmount, fillCount)`
@@ -641,14 +673,14 @@ NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID="your_project_id"
 NEXT_PUBLIC_CHAIN_A_ID=56
 NEXT_PUBLIC_CHAIN_A_NAME="BSC"
 NEXT_PUBLIC_CHAIN_A_RPC_URL="https://bsc-dataseed1.binance.org"
-NEXT_PUBLIC_CHAIN_A_VAULT_CONTRACT="0x2d66cd7d401b840f5e5b9f4a75794359126fe250"
+NEXT_PUBLIC_CHAIN_A_VAULT_CONTRACT="0xeB3aAFbA958A22E7c5DCAd4245569BCCfd225417"
 NEXT_PUBLIC_CHAIN_A_USDT_CONTRACT="0x55d398326f99059fF775485246999027B3197955"
 
 # DSC Chain
 NEXT_PUBLIC_CHAIN_B_ID=1555
 NEXT_PUBLIC_CHAIN_B_NAME="DSC Chain"
 NEXT_PUBLIC_CHAIN_B_RPC_URL="https://rpc01.dscscan.io/"
-NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT="0xdd8bbebc2b41e09ee5196c7e8436e625e4788b2d"
+NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT="0x9c2B0cD6Ea9058B542D50905E8E08DdF0503c013"
 NEXT_PUBLIC_CHAIN_B_USDT_CONTRACT="0xbc27aCEac6865dE31a286Cd9057564393D5251CB"
 
 # Indexer
@@ -691,41 +723,48 @@ pnpm start
 ### 1. Real-time Order Display
 
 **How it works**:
+
 1. Frontend fetches orders from `/api/p2p/orders`
 2. API queries database (indexed by indexer)
 3. For MATCHED orders, API fetches remaining amount from contract
 4. Frontend displays orders with real-time data
 
 **Why database + contract**:
+
 - Database: Fast queries, historical data, all statuses
 - Contract: Accurate remaining amounts for partial fills
 
 ### 2. Total Locked Amount
 
 **How it works**:
+
 1. Frontend calls `/api/p2p/locked-amount?chainId=56`
 2. API calls `contract.totalLocked()` directly from blockchain
 3. Returns real-time locked amount in USDT
 
 **Why direct contract call**:
+
 - Most accurate (contract maintains totalLocked state)
 - Includes all locked funds (OPEN + MATCHED orders)
 
 ### 3. Trade History with Maker/Taker
 
 **How it works**:
+
 1. API fetches orders with related events
 2. Extracts taker address from `OrderMatched` or `OrderCompleted` events
 3. Collects all transaction hashes from events
 4. Frontend displays maker, taker, chains, and all transaction links
 
 **Event Args Structure**:
+
 - `OrderMatched`: `{ orderId, buyer, seller, amount }`
 - `OrderCompleted`: `{ orderId, buyer, seller, amount, dscTxHash }`
 
 ### 4. Partial Trade Detection
 
 **How it works**:
+
 1. For MATCHED orders, API calls `contract.getOrder(orderId)`
 2. Gets `amount` and `filledAmount`
 3. Calculates `remaining = amount - filledAmount`
@@ -734,6 +773,7 @@ pnpm start
 ### 5. Indexer Reorg Handling
 
 **How it works**:
+
 1. Indexer stores `lastBlockHash` with `lastBlockNumber`
 2. On each poll, checks if stored hash matches current block hash
 3. If mismatch: Reorg detected
@@ -745,15 +785,15 @@ pnpm start
 
 ## API Endpoints Summary
 
-| Endpoint | Method | Purpose | Response |
-|----------|--------|---------|----------|
-| `/api/p2p/orders` | GET | Fetch orders with filters | `{ orders, total, totalLocked }` |
-| `/api/p2p/orders` | POST | Create order (used by indexer) | Order object |
-| `/api/p2p/stats` | GET | Platform/user statistics | Stats object |
-| `/api/p2p/locked-amount` | GET | Get locked amount from contract | `{ chainId, totalLocked }` |
-| `/api/p2p/history` | GET | User trade history | `{ history }` |
-| `/api/user` | POST | Create/update user | User object |
-| `/api/health` | GET | Health check | `{ status: "ok" }` |
+| Endpoint                 | Method | Purpose                         | Response                         |
+| ------------------------ | ------ | ------------------------------- | -------------------------------- |
+| `/api/p2p/orders`        | GET    | Fetch orders with filters       | `{ orders, total, totalLocked }` |
+| `/api/p2p/orders`        | POST   | Create order (used by indexer)  | Order object                     |
+| `/api/p2p/stats`         | GET    | Platform/user statistics        | Stats object                     |
+| `/api/p2p/locked-amount` | GET    | Get locked amount from contract | `{ chainId, totalLocked }`       |
+| `/api/p2p/history`       | GET    | User trade history              | `{ history }`                    |
+| `/api/user`              | POST   | Create/update user              | User object                      |
+| `/api/health`            | GET    | Health check                    | `{ status: "ok" }`               |
 
 ---
 
@@ -764,6 +804,7 @@ pnpm start
 Fetches orders from database API.
 
 **Returns**:
+
 - `orders`: Array of orders
 - `total`: Total count
 - `totalLocked`: Total locked amount
@@ -776,6 +817,7 @@ Fetches orders from database API.
 Fetches platform or user statistics.
 
 **Returns**:
+
 - `stats`: Stats object
 - `loading`: Loading state
 - `error`: Error state
