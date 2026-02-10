@@ -451,6 +451,7 @@ async function processDscSellOrderCreated(
   event: ProcessedEvent,
   eventId: string
 ): Promise<void> {
+  console.log("in processDscSellOrderCreated", "=>>>>>>>>>>>>>>>>>>>>>>");
   const args = event.args as {
     orderId: bigint;
     user: Address;
@@ -583,79 +584,46 @@ async function processDscOrderCompleted(
   eventId: string
 ): Promise<void> {
   const args = event.args as {
+    dscOrderId: bigint;
     orderId: bigint;
-    user: Address;
-    totalAmount: bigint;
-    fillCount: bigint;
+    seller: Address;
+    buyer: Address;
+    amount: bigint;
+    bscTxHash: Hash;
   };
 
+  // Complete both orders
   const bscOrder = await safeDbOperation(async () => {
     return await prisma.order.findUnique({
-      where: { orderId: args.orderId },
+      where: { orderId: BigInt(args.orderId) },
     });
   }, `find BSC order ${args.orderId} for DSC completion`);
 
   if (bscOrder) {
+    // For BSC orders: maker is buyer, taker is seller
     await safeDbOperation(async () => {
       await prisma.order.update({
         where: { id: bscOrder.id },
         data: {
           status: OrderStatus.COMPLETED,
+          takerAddress: args.seller.toLowerCase(), // Store taker address
         },
       });
-    }, `update BSC order ${bscOrder.id} to completed`);
+    }, `update BSC order ${bscOrder.id} to completed with taker`);
+
+    // Link event to order
+    await safeDbOperation(async () => {
+      await prisma.event.update({
+        where: { id: eventId },
+        data: { orderId: bscOrder.id },
+      });
+    }, `link DSC completion event to BSC order ${bscOrder.id}`);
   }
 
-  console.log(
-    `Order Completed: Order ${args.orderId} | User ${args.user} | TotalAmount ${args.totalAmount} | Fills ${args.fillCount}`
-  );
+  // console.log(
+  //   `Completed cross-chain trade: BSC ${args.bscOrderId} <-> DSC ${args.dscOrderId} with taker ${args.user}`
+  // );
 }
-
-// async function processDscOrderCompleted(
-//   event: ProcessedEvent,
-//   eventId: string
-// ): Promise<void> {
-//   const args = event.args as {
-//     dscOrderId: bigint;
-//     orderId: bigint;
-//     seller: Address;
-//     buyer: Address;
-//     amount: bigint;
-//     bscTxHash: Hash;
-//   };
-
-//   // Complete both orders
-//   const bscOrder = await safeDbOperation(async () => {
-//     return await prisma.order.findUnique({
-//       where: { orderId: BigInt(args.orderId) },
-//     });
-//   }, `find BSC order ${args.orderId} for DSC completion`);
-
-//   if (bscOrder) {
-//     // For BSC orders: maker is buyer, taker is seller
-//     await safeDbOperation(async () => {
-//       await prisma.order.update({
-//         where: { id: bscOrder.id },
-//         data: {
-//           status: OrderStatus.COMPLETED,
-//           takerAddress: args.seller.toLowerCase(), // Store taker address
-//         },
-//       });
-//     }, `update BSC order ${bscOrder.id} to completed with taker`);
-
-//     // Link event to order
-//     await safeDbOperation(async () => {
-//       await prisma.event.update({
-//         where: { id: eventId },
-//         data: { orderId: bscOrder.id },
-//       });
-//     }, `link DSC completion event to BSC order ${bscOrder.id}`);
-//   }
-
-//   console.log(
-//     `Completed cross-chain trade: BSC ${args.bscOrderId} <-> DSC ${args.dscOrderId} with taker ${args.user}`
-//   );
-// }
 
 // Helper function to get user's current volume
 async function getUserVolume(address: string): Promise<string> {

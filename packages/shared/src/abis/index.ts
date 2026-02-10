@@ -232,64 +232,7 @@ export const P2PEscrowHTLCABI = [
 // =============================================================================
 // P2PVaultBSC ABI (Buy Orders)
 // =============================================================================
-// export const P2PVaultBSCABI = [
-//   {
-//     type: "event",
-//     name: "OrderCreated",
-//     inputs: [
-//       { name: "orderId", type: "uint256", indexed: true },
-//       { name: "user", type: "address", indexed: true },
-//       { name: "orderType", type: "uint8", indexed: false },
-//       { name: "amount", type: "uint256", indexed: false },
-//       { name: "expiresAt", type: "uint256", indexed: false },
-//     ],
-//   },
-//   {
-//     type: "event",
-//     name: "OrderFilled",
-//     inputs: [
-//       { name: "bscOrderId", type: "uint256", indexed: true },
-//       { name: "dscOrderId", type: "uint256", indexed: true },
-//       { name: "filler", type: "address", indexed: true },
-//       { name: "amount", type: "uint256", indexed: false },
-//       { name: "isPartial", type: "bool", indexed: false },
-//     ],
-//   },
-//   {
-//     type: "event",
-//     name: "OrderCompleted",
-//     inputs: [
-//       { name: "orderId", type: "uint256", indexed: true },
-//       { name: "user", type: "address", indexed: true },
-//       { name: "totalAmount", type: "uint256", indexed: false },
-//       { name: "fillCount", type: "uint256", indexed: false },
-//     ],
-//   },
-//   {
-//     type: "event",
-//     name: "OrderCancelled",
-//     inputs: [
-//       { name: "orderId", type: "uint256", indexed: true },
-//       { name: "user", type: "address", indexed: true },
-//       { name: "refundAmount", type: "uint256", indexed: false },
-//     ],
-//   },
-//   {
-//     type: "event",
-//     name: "FundsReleased",
-//     inputs: [
-//       { name: "bscOrderId", type: "uint256", indexed: true },
-//       { name: "recipient", type: "address", indexed: true },
-//       { name: "amount", type: "uint256", indexed: false },
-//       { name: "dscTxHash", type: "bytes32", indexed: false },
-//     ],
-//   },
-// ] as const;
-
-// =============================================================================
-// P2PVaultDSC ABI (Sell Orders / Fill Orders)
-// =============================================================================
-export const P2PVaultDSCABI = [
+export const P2PVaultBSCABI = [
   {
     type: "event",
     name: "OrderCreated",
@@ -342,7 +285,11 @@ export const P2PVaultDSCABI = [
     ],
   },
 ] as const;
-export const P2PVaultBSCABI = [
+
+// =============================================================================
+// P2PVaultDSC ABI (Sell Orders / Fill Orders)
+// =============================================================================
+export const P2PVaultDSCABI = [
   {
     type: "event",
     name: "OrderCreated",
