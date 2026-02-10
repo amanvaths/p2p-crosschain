@@ -30,13 +30,11 @@ const dscChain = {
 // GET - Fetch orders with filters
 export async function GET(request: NextRequest) {
   try {
-    // Check if takerAddress column exists by trying a simple query
     let hasTakerAddressColumn = false;
     try {
       await prisma.$queryRaw`SELECT "takerAddress" FROM "orders" LIMIT 1`;
       hasTakerAddressColumn = true;
     } catch (error: any) {
-      // Column doesn't exist, will extract from events
       hasTakerAddressColumn = false;
     }
 
@@ -50,24 +48,20 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50");
     const offset = parseInt(searchParams.get("offset") || "0");
 
-    // Build where clause
     const where: any = {};
 
     if (status && status.toLowerCase() !== "all") {
-      // Convert to uppercase for Prisma enum
       where.status = status.toUpperCase();
     }
-    // When status is 'all' or not specified, don't add status filter (show all statuses)
 
     if (maker) {
       where.maker = maker.toLowerCase();
     }
-
+    console.log({ maker });
     if (chainId) {
       where.chainId = parseInt(chainId);
     }
 
-    // Amount filter (sellAmount for sell orders, buyAmount for buy orders)
     if (minAmount || maxAmount) {
       where.sellAmount = {};
       if (minAmount) {
@@ -78,7 +72,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch orders - use include instead of select to avoid column issues
     const [orders, total] = await Promise.all([
       prisma.order.findMany({
         where,
@@ -120,8 +113,6 @@ export async function GET(request: NextRequest) {
       prisma.order.count({ where }),
     ]);
 
-    // Also fetch events by orderId from args for ALL orders (not just those without linked events)
-    // This ensures we get events even if they're not properly linked via orderId foreign key
     const ordersWithEvents = await Promise.all(
       orders.map(async (order) => {
         const orderIdStr = order.orderId.toString();
@@ -182,9 +173,6 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    // Calculate total locked amount from displayed orders
-    // Only count OPEN and MATCHED (MAKER_LOCKED/TAKER_LOCKED) orders as locked
-    // Note: This is an approximation. For accurate locked amount, use /api/p2p/locked-amount?chainId=X
     const totalLockedWei = orders.reduce((sum, order) => {
       if (
         order.status === "OPEN" ||
@@ -197,8 +185,6 @@ export async function GET(request: NextRequest) {
     }, BigInt(0));
     const totalLockedUSDT = Number(totalLockedWei) / 1e18;
 
-    // For MATCHED/MAKER_LOCKED/TAKER_LOCKED orders, fetch remaining amount from contract
-    // Also extract taker address and related transaction hashes from events
     const serializedOrders = await Promise.all(
       ordersWithEvents.map(async (order, index) => {
         let remainingAmount = order.sellAmount;
@@ -211,14 +197,10 @@ export async function GET(request: NextRequest) {
           createdAt: string;
         }> = [];
 
-        // Use takerAddress from order if available (now stored directly in DB)
-        // Handle case where column might not exist yet (migration not run)
         if (hasTakerAddressColumn) {
           takerAddress = (order as any).takerAddress || null;
         }
 
-        // Extract transaction hashes from events
-        // Also fix placeholder txHash from order
         let orderTxHash = order.txHash;
         const isPlaceholderTxHash =
           order.txHash ===
@@ -297,8 +279,6 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        // If still no transaction hashes, try to fetch from blockchain for ALL orders with placeholder
-        // Process ALL orders but with small delay to avoid rate limiting
         if (transactionHashes.length === 0 && isPlaceholderTxHash) {
           // Add small delay for orders after first 5 to avoid rate limiting
           if (index > 5) {
@@ -496,7 +476,6 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // If order is MATCHED/MAKER_LOCKED/TAKER_LOCKED, fetch remaining from contract
         if (
           order.status === "MAKER_LOCKED" ||
           order.status === "TAKER_LOCKED"

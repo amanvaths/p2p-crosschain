@@ -274,7 +274,7 @@ async function processBscOrderCompleted(
     amount: bigint;
     dscTxHash: Hash;
   };
-
+  console.log({ args }, "bsc order completed=>>>>>>>");
   const order = await safeDbOperation(async () => {
     return await prisma.order.findUnique({
       where: { orderId: args.orderId },
@@ -393,7 +393,9 @@ export async function processDscVaultEvent(
     return;
   }
 
-  console.log(`[DSC] Processing ${decoded.eventName}`);
+  console.log(
+    `[DSC] Processing ${decoded.eventName}=>>>>>>>>>>>>>>>>>>>>>>>>>>>>`
+  );
 
   // Store raw event (with retry)
   const event = await safeDbOperation(async () => {
@@ -423,13 +425,16 @@ export async function processDscVaultEvent(
       },
     });
   }, `store DSC event ${decoded.eventName}`);
-  console.log("At line no 425", decoded.eventName);
+  // console.log(
+  //   "At line no 425=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>",
+  //   decoded.eventName
+  // );
   // Process based on event type
   switch (decoded.eventName) {
     case "OrderCreated":
       await processDscSellOrderCreated(chainId, decoded, event.id);
       break;
-    case "DirectFillCreated":
+    case "OrderFilled":
       await processDscDirectFill(decoded, event.id);
       break;
     case "OrderCancelled":
@@ -528,11 +533,12 @@ async function processDscDirectFill(
   const args = event.args as {
     dscOrderId: bigint;
     bscOrderId: bigint;
-    seller: Address;
-    buyer: Address;
+    recipient: Address;
+    isPartial: Boolean;
     amount: bigint;
   };
 
+  console.log({ args }, "=>>>>>>>>> orderfilled");
   // Find the BSC order that's being filled
   const bscOrder = await prisma.order.findUnique({
     where: { orderId: args.bscOrderId },
@@ -583,43 +589,48 @@ async function processDscOrderCompleted(
   event: ProcessedEvent,
   eventId: string
 ): Promise<void> {
-  const args = event.args as {
-    dscOrderId: bigint;
-    orderId: bigint;
-    seller: Address;
-    buyer: Address;
-    amount: bigint;
-    bscTxHash: Hash;
-  };
-
-  // Complete both orders
-  const bscOrder = await safeDbOperation(async () => {
-    return await prisma.order.findUnique({
-      where: { orderId: BigInt(args.orderId) },
-    });
-  }, `find BSC order ${args.orderId} for DSC completion`);
-
-  if (bscOrder) {
-    // For BSC orders: maker is buyer, taker is seller
-    await safeDbOperation(async () => {
-      await prisma.order.update({
-        where: { id: bscOrder.id },
-        data: {
-          status: OrderStatus.COMPLETED,
-          takerAddress: args.seller.toLowerCase(), // Store taker address
-        },
+  try {
+    const args = event.args as {
+      orderId: bigint;
+      user: Address;
+      totalAmount: bigint;
+      bscTxHash: Hash;
+    };
+    const uniqueOrderId = args.orderId + BigInt(1000000);
+    console.log(
+      args,
+      uniqueOrderId,
+      "processDscOrderCompleted================"
+    );
+    // Complete both orders
+    const bscOrder = await safeDbOperation(async () => {
+      return await prisma.order.findUnique({
+        where: { orderId: BigInt(uniqueOrderId) },
       });
-    }, `update BSC order ${bscOrder.id} to completed with taker`);
+    }, `find BSC order ${uniqueOrderId} for DSC completion`);
 
-    // Link event to order
-    await safeDbOperation(async () => {
-      await prisma.event.update({
-        where: { id: eventId },
-        data: { orderId: bscOrder.id },
-      });
-    }, `link DSC completion event to BSC order ${bscOrder.id}`);
+    if (bscOrder) {
+      await safeDbOperation(async () => {
+        await prisma.order.update({
+          where: { id: bscOrder.id },
+          data: {
+            status: OrderStatus.COMPLETED,
+            takerAddress: args.user.toLowerCase(), // Store taker address
+          },
+        });
+      }, `update BSC order ${bscOrder.id} to completed with taker`);
+
+      // Link event to order
+      await safeDbOperation(async () => {
+        await prisma.event.update({
+          where: { id: eventId },
+          data: { orderId: bscOrder.id },
+        });
+      }, `link DSC completion event to BSC order ${bscOrder.id}`);
+    }
+  } catch (error) {
+    console.log(error);
   }
-
   // console.log(
   //   `Completed cross-chain trade: BSC ${args.bscOrderId} <-> DSC ${args.dscOrderId} with taker ${args.user}`
   // );

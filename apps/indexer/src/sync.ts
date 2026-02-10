@@ -268,7 +268,7 @@ export async function syncChain(chainConfig: ChainConfig): Promise<void> {
       (client) => client.getBlockNumber(),
       `get current block for ${name}`
     );
-    console.log({ fromBlock, currentBlock, name, orderbookAddress });
+    // console.log({ fromBlock, currentBlock, name, orderbookAddress });
 
     const safeBlock = currentBlock - BigInt(chainConfig.confirmations);
 
