@@ -58,7 +58,7 @@ const config = {
       process.env.NEXT_PUBLIC_CHAIN_B_RPC_URL || "https://rpc01.dscscan.io/",
     vaultAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT ||
-        "0x9c2B0cD6Ea9058B542D50905E8E08DdF0503c013"
+        "0x149D6e5FcF2Dc11c7b9Ab863489D4078354f7128"
     ),
     usdtAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_B_USDT_CONTRACT ||
