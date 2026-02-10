@@ -96,7 +96,7 @@ export async function processBscVaultEvent(
     case "OrderCancelled":
       await processBscOrderCancelled(decoded, event.id);
       break;
-    case "OrderMatched":
+    case "OrderFilled":
       await processBscOrderMatched(decoded, event.id);
       break;
     case "OrderCompleted":
@@ -225,20 +225,22 @@ async function processBscOrderMatched(
   eventId: string
 ): Promise<void> {
   const args = event.args as {
-    orderId: bigint;
+    dscOrderId: bigint;
     buyer: Address;
     seller: Address;
     amount: bigint;
   };
 
+  const uniqueOrderId = args.dscOrderId + BigInt(1000000);
+
   const order = await safeDbOperation(async () => {
     return await prisma.order.findUnique({
-      where: { orderId: args.orderId },
+      where: { orderId: uniqueOrderId },
     });
-  }, `find order ${args.orderId} for match`);
+  }, `find order ${uniqueOrderId} for match`);
 
   if (!order) {
-    console.warn(`Order ${args.orderId} not found for match`);
+    console.warn(`Order ${uniqueOrderId} not found for match`);
     return;
   }
 
@@ -462,6 +464,7 @@ async function processDscSellOrderCreated(
     user: Address;
     amount: bigint;
     expiresAt: bigint;
+    linkedBscOrderId: bigint;
   };
 
   // Use a unique ID combining chain and orderId
@@ -493,7 +496,10 @@ async function processDscSellOrderCreated(
           "0x0000000000000000000000000000000000000000000000000000000000000000",
         makerTimelock: args.expiresAt,
         takerTimelock: args.expiresAt,
-        status: OrderStatus.OPEN,
+        status:
+          args.linkedBscOrderId == 0n
+            ? OrderStatus.OPEN
+            : OrderStatus.MAKER_LOCKED,
         cancelled: false,
         txHash: event.txHash,
         blockNumber: event.blockNumber,
