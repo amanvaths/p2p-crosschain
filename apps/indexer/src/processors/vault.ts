@@ -224,44 +224,51 @@ async function processBscOrderMatched(
   event: ProcessedEvent,
   eventId: string
 ): Promise<void> {
-  const args = event.args as {
-    dscOrderId: bigint;
-    filler: Address;
-    amount: bigint;
-  };
-  console.log({ args }, "=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> process order filled");
-  const uniqueOrderId = args.dscOrderId + BigInt(1000000);
+  try {
+    const args = event.args as {
+      dscOrderId: bigint;
+      filler: Address;
+      amount: bigint;
+    };
+    console.log(
+      { args },
+      "=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> process order filled"
+    );
+    const uniqueOrderId = args.dscOrderId + BigInt(1000000);
 
-  const order = await safeDbOperation(async () => {
-    return await prisma.order.findUnique({
-      where: { orderId: uniqueOrderId },
-    });
-  }, `find order ${uniqueOrderId} for match`);
+    const order = await safeDbOperation(async () => {
+      return await prisma.order.findUnique({
+        where: { orderId: uniqueOrderId },
+      });
+    }, `find order ${uniqueOrderId} for match`);
 
-  if (!order) {
-    console.warn(`Order ${uniqueOrderId} not found for match`);
-    return;
+    if (!order) {
+      console.warn(`Order ${uniqueOrderId} not found for match`);
+      return;
+    }
+
+    // For BSC orders: maker is buyer, taker is seller
+    await safeDbOperation(async () => {
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          status: OrderStatus.MAKER_LOCKED,
+          takerAddress: args.filler.toLowerCase(), // Store taker address
+        },
+      });
+    }, `update order ${order.id} status and taker`);
+
+    await safeDbOperation(async () => {
+      await prisma.event.update({
+        where: { id: eventId },
+        data: { orderId: order.id },
+      });
+    }, `link event ${eventId} to order ${order.id}`);
+
+    console.log(`Matched order ${order.id} with taker ${args.filler}`);
+  } catch (error) {
+    console.log(error, "error in line 270");
   }
-
-  // For BSC orders: maker is buyer, taker is seller
-  await safeDbOperation(async () => {
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        status: OrderStatus.MAKER_LOCKED,
-        takerAddress: args.filler.toLowerCase(), // Store taker address
-      },
-    });
-  }, `update order ${order.id} status and taker`);
-
-  await safeDbOperation(async () => {
-    await prisma.event.update({
-      where: { id: eventId },
-      data: { orderId: order.id },
-    });
-  }, `link event ${eventId} to order ${order.id}`);
-
-  console.log(`Matched order ${order.id} with taker ${args.filler}`);
 }
 
 async function processBscOrderCompleted(
