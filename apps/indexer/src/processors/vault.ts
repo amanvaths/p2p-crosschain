@@ -226,11 +226,10 @@ async function processBscOrderMatched(
 ): Promise<void> {
   const args = event.args as {
     dscOrderId: bigint;
-    buyer: Address;
     filler: Address;
     amount: bigint;
   };
-
+  console.log({ args }, "=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> process order filled");
   const uniqueOrderId = args.dscOrderId + BigInt(1000000);
 
   const order = await safeDbOperation(async () => {
