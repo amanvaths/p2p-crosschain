@@ -45,7 +45,7 @@ const config = {
       "https://bsc-dataseed1.binance.org",
     vaultAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_A_VAULT_CONTRACT ||
-        "0xeB3aAFbA958A22E7c5DCAd4245569BCCfd225417"
+        "0xA8644262F349cD2c19a524cc705c00780B7c42d3"
     ),
     usdtAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_A_USDT_CONTRACT ||
@@ -58,7 +58,7 @@ const config = {
       process.env.NEXT_PUBLIC_CHAIN_B_RPC_URL || "https://rpc01.dscscan.io/",
     vaultAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT ||
-        "0x149D6e5FcF2Dc11c7b9Ab863489D4078354f7128"
+        "0xB9Eb7a8433713A69B72C6d8aE1dD52F0D2E61dE7"
     ),
     usdtAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_B_USDT_CONTRACT ||
