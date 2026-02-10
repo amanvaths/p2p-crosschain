@@ -227,7 +227,7 @@ async function processBscOrderMatched(
   const args = event.args as {
     dscOrderId: bigint;
     buyer: Address;
-    seller: Address;
+    filler: Address;
     amount: bigint;
   };
 
@@ -250,7 +250,7 @@ async function processBscOrderMatched(
       where: { id: order.id },
       data: {
         status: OrderStatus.MAKER_LOCKED,
-        takerAddress: args.seller.toLowerCase(), // Store taker address
+        takerAddress: args.filler.toLowerCase(), // Store taker address
       },
     });
   }, `update order ${order.id} status and taker`);
@@ -262,7 +262,7 @@ async function processBscOrderMatched(
     });
   }, `link event ${eventId} to order ${order.id}`);
 
-  console.log(`Matched order ${order.id} with taker ${args.seller}`);
+  console.log(`Matched order ${order.id} with taker ${args.filler}`);
 }
 
 async function processBscOrderCompleted(
