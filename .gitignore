@@ -26,3 +26,6 @@ apps/web/public/*.map
 # relayer private infra
 apps/relayer/.env
 apps/relayer/node_modules
+
+.turbo
+turbo
