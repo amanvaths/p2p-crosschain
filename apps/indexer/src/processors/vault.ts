@@ -280,7 +280,7 @@ async function processBscOrderMatched(
     const args = event.args as {
       dscOrderId: bigint;
       bscOrderId: bigint;
-      recipient: Address;
+      filler: Address;
       amount: bigint;
       isPartial: boolean;
     };
@@ -301,7 +301,7 @@ async function processBscOrderMatched(
       //     where: { id: order.id },
       //     data: {
       //       status: OrderStatus.PARTIALLY_FILLED,
-      //       takerAddress: args.recipient.toLowerCase(),
+      //       takerAddress: args.filler.toLowerCase(),
       //     },
       //   });
       // }, `update order ${order.id} partial`);
@@ -311,7 +311,7 @@ async function processBscOrderMatched(
           where: { id: order.id },
           data: {
             status: OrderStatus.COMPLETED,
-            takerAddress: args.recipient.toLowerCase(),
+            takerAddress: args.filler.toLowerCase(),
           },
         });
       }, `update order ${order.id} complete`);
