@@ -556,8 +556,6 @@ async function processDscDirectFill(
     where: { orderId: args.bscOrderId },
   });
 
-  console.log();
-
   if (bscOrder && args.isPartial == false) {
     await prisma.order.update({
       where: { id: bscOrder.id },
