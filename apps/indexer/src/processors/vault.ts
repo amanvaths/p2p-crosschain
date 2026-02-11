@@ -556,10 +556,12 @@ async function processDscDirectFill(
     where: { orderId: args.bscOrderId },
   });
 
-  if (bscOrder) {
+  console.log();
+
+  if (bscOrder && args.isPartial == false) {
     await prisma.order.update({
       where: { id: bscOrder.id },
-      data: { status: OrderStatus.TAKER_LOCKED },
+      data: { status: OrderStatus.COMPLETED },
     });
   }
 
