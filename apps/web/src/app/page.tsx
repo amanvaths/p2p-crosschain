@@ -16,7 +16,12 @@ import {
   type Order,
   type Stats,
 } from "@/hooks/useDatabase";
-import { useCancelBscOrder, useCancelDscOrder } from "@/hooks/useP2PVault";
+import {
+  useBscOrder,
+  useCancelBscOrder,
+  useCancelDscOrder,
+  useDscOrder,
+} from "@/hooks/useP2PVault";
 import {
   getContractAddress,
   BSC_CHAIN_ID,
@@ -367,7 +372,7 @@ function CreateOrderModal({
             >
               <div className="flex items-center justify-between text-sm">
                 <div className="text-center flex-1">
-                  <div className="text-muted text-xs mb-1">You Pay</div>
+                  <div className="text-muted text-xs mb-1">You Pay </div>
                   <div className="flex items-center justify-center gap-2">
                     <img
                       src={
@@ -674,11 +679,13 @@ interface TradeConfirmModalProps {
   onClose: () => void;
   order: {
     id: number;
-    orderId?: bigint | string | number;
+    orderId?: any;
     userAddress: string;
     fullAddress?: string;
     amount: string;
     timestamp: number;
+    chainId: any;
+
     type: "buy" | "sell";
     price: string;
   } | null;
@@ -693,7 +700,7 @@ function TradeConfirmModalInner({
   onClose,
   onTradeSuccess,
 }: {
-  order: NonNullable<TradeConfirmModalProps["order"]>;
+  order: any;
   tradeType: "buy" | "sell";
   onClose: () => void;
   onTradeSuccess?: () => void;
@@ -751,9 +758,24 @@ function TradeConfirmModalInner({
     vaultAddress,
     usdtAddress,
   });
+  const orderId = BigInt(order.orderId);
+  const isBsc = order.chainId === 56;
 
-  const amount = parseFloat(order.amount);
-  const amountWei = parseUnits(order.amount, 18);
+  const { order: bscOrder } = useBscOrder(isBsc ? orderId : undefined);
+  const { order: dscOrder } = useDscOrder(!isBsc ? orderId : undefined);
+  // console.log(Number(order.amount) - Number(bscOrder.filledAmount) / 1e18);
+  const filled = !isBsc
+    ? dscOrder && Number(dscOrder.filledAmount) / 1e18
+    : bscOrder && Number(bscOrder.filledAmount) / 1e18;
+  // console.log({ filled });
+
+  const remainingAmount: any = Number(order.amount) - (filled || 0);
+  console.log({ remainingAmount });
+  const amount: any = parseFloat(remainingAmount);
+  console.log({ amount });
+  // const amountWei: any = parseUnits(amount, 18);
+  const amountWei: any = parseUnits(remainingAmount.toString(), 18);
+  console.log({ amountWei });
   const payToken = isFillingBuyOrder ? "DEP20 USDT" : "BEP20 USDT";
   const payChain = isFillingBuyOrder ? "DSC" : "BSC";
   const receiveToken = isFillingBuyOrder ? "BEP20 USDT" : "DEP20 USDT";
@@ -1787,11 +1809,13 @@ interface OrderRowProps {
   order: {
     id: number;
     userAddress: string;
-    amount: string;
+    amount: any;
     timestamp: number;
     type: "buy" | "sell";
     price: string;
     status?: string;
+    chainId: number;
+    orderId: number;
   };
   index: number;
   activeTab: "buy" | "sell";
@@ -1810,8 +1834,19 @@ function OrderRow({
   onTradeClick,
   onCancelClick,
 }: OrderRowProps) {
-  // console.log(Number(order.orderId), "123");
+  console.log(order, "123");
   // Action/Status button component
+  const orderId = BigInt(order.orderId);
+  const isBsc = order.chainId === 56;
+
+  const { order: bscOrder } = useBscOrder(isBsc ? orderId : undefined);
+  const { order: dscOrder } = useDscOrder(!isBsc ? orderId : undefined);
+  const filled = !isBsc
+    ? dscOrder && Number(dscOrder.filledAmount) / 1e18
+    : bscOrder && Number(bscOrder.filledAmount) / 1e18;
+
+  const remainingAmount = Number(order.amount) - (filled || 0);
+
   const ActionButton = () =>
     isMyOrders ? (
       // My Orders - show status or cancel button
@@ -1890,8 +1925,9 @@ function OrderRow({
         {/* Amount */}
         <div className="col-span-2 text-right">
           <span className="font-semibold text-white">
-            {Number(order.amount).toLocaleString()}
+            {remainingAmount.toLocaleString()}
           </span>
+
           <span
             className={`text-xs ml-1 ${
               order.type === "buy" ? "text-green-400" : "text-red-400"
@@ -1964,7 +2000,7 @@ function OrderRow({
             <div>
               <div className="text-xs text-muted mb-1">Amount</div>
               <div className="font-semibold text-white text-lg">
-                {Number(order.amount).toLocaleString()}
+                {Number(remainingAmount).toLocaleString()}
                 <span
                   className={`text-xs ml-1 ${
                     order.type === "buy" ? "text-green-400" : "text-red-400"
@@ -2045,25 +2081,29 @@ export default function HomePage() {
   );
 
   // Map database orders to display format (for public order book)
-  const publicOrders = (dbOrders || []).map((order: any, index: number) => ({
-    id: `db-${index}`,
-    userAddress:
-      `${order.maker?.slice(0, 6)}...${order.maker?.slice(-4)}` || "Unknown",
-    fullAddress: order.maker || "",
-    status: order.status || "OPEN",
-    amount: formatUnits(BigInt(order.sellAmount || "0"), 18),
-    timestamp: order.createdAt
-      ? new Date(order.createdAt).getTime()
-      : Date.now(),
-    type: order.srcChainId === BSC_CHAIN_ID ? "buy" : "sell", // BSC orders are buy orders
-    price: "1.0000",
-    orderId: BigInt(order.orderId || "0"),
-    dbId: order.id,
-    chainId:
-      order.srcChainId ||
-      (order.srcChainId === BSC_CHAIN_ID ? BSC_CHAIN_ID : DSC_CHAIN_ID),
-  }));
 
+  const publicOrders = (dbOrders || []).map((order: any, index: number) => {
+    return {
+      id: `db-${index}`,
+      userAddress:
+        `${order.maker?.slice(0, 6)}...${order.maker?.slice(-4)}` || "Unknown",
+      fullAddress: order.maker || "",
+      status: order.status || "OPEN",
+      amount: formatUnits(BigInt(order.sellAmount || "0"), 18),
+      timestamp: order.createdAt
+        ? new Date(order.createdAt).getTime()
+        : Date.now(),
+      type: order.srcChainId === BSC_CHAIN_ID ? "buy" : "sell", // BSC orders are buy orders
+      price: "1.0000",
+      orderId: BigInt(order.orderId || "0"),
+      dbId: order.id,
+      chainId:
+        order.srcChainId ||
+        (order.srcChainId === BSC_CHAIN_ID ? BSC_CHAIN_ID : DSC_CHAIN_ID),
+    };
+  });
+
+  // console.log({ publicOrders });
   // Map user orders from database to display format (for My Orders tab)
   const myOrders = (userDbOrders || []).map((order: any, index: number) => ({
     id: `user-${index}`,
@@ -2146,7 +2186,6 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [activeTab, showMyOrders]);
 
-  // Use contract locked amount if available, otherwise calculate from displayed orders
   const displayedTotalLocked = showMyOrders
     ? displayedOrders.reduce((sum, order) => {
         if (
@@ -2177,19 +2216,22 @@ export default function HomePage() {
   const isLoadingMore = loadingDbOrders || loadingUserDbOrders;
 
   // Trade confirmation modal state
-  const [selectedOrder, setSelectedOrder] = useState<{
-    id: number;
-    userAddress: string;
-    fullAddress?: string;
-    amount: string;
-    timestamp: number;
-    type: "buy" | "sell";
-    price: string;
-    status?: string;
-    orderId?: any;
-    dbId?: string;
-    chainId?: number;
-  } | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<
+    | {
+        id: number;
+        userAddress: string;
+        fullAddress?: string;
+        amount: string;
+        timestamp: number;
+        type: "buy" | "sell";
+        price: string;
+        status?: string;
+        orderId?: any;
+        dbId?: string;
+        chainId?: number;
+      }
+    | any
+  >(null);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState(false);
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
 
