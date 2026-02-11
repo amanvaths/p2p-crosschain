@@ -300,7 +300,7 @@ async function processBscOrderMatched(
       //   await prisma.order.update({
       //     where: { id: order.id },
       //     data: {
-      //       status: "PARTIALLY_FILLED",
+      //       status: OrderStatus.PARTIALLY_FILLED,
       //       takerAddress: args.recipient.toLowerCase(),
       //     },
       //   });

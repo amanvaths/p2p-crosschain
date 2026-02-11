@@ -54,6 +54,7 @@ enum OrderStatus {
   REFUNDED
   CANCELLED
   EXPIRED
+  PARTIALLY_FILLED
 }
 
 model Escrow {

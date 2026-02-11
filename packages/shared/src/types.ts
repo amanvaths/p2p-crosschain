@@ -2,27 +2,28 @@
 // P2P Atomic Exchange - Shared Types
 // =============================================================================
 
-import type { Address, Hash, Hex } from 'viem';
+import type { Address, Hash, Hex } from "viem";
 
 // -----------------------------------------------------------------------------
 // Order Types
 // -----------------------------------------------------------------------------
 
 export enum OrderStatus {
-  OPEN = 'OPEN',
-  MAKER_LOCKED = 'MAKER_LOCKED',
-  TAKER_LOCKED = 'TAKER_LOCKED',
-  COMPLETED = 'COMPLETED',
-  REFUNDED = 'REFUNDED',
-  CANCELLED = 'CANCELLED',
-  EXPIRED = 'EXPIRED',
+  OPEN = "OPEN",
+  MAKER_LOCKED = "MAKER_LOCKED",
+  TAKER_LOCKED = "TAKER_LOCKED",
+  COMPLETED = "COMPLETED",
+  REFUNDED = "REFUNDED",
+  CANCELLED = "CANCELLED",
+  EXPIRED = "EXPIRED",
+  PARTIALLY_FILLED = "PARTIALLY_FILLED",
 }
 
 export enum EscrowStatus {
-  NONE = 'NONE',
-  LOCKED = 'LOCKED',
-  CLAIMED = 'CLAIMED',
-  REFUNDED = 'REFUNDED',
+  NONE = "NONE",
+  LOCKED = "LOCKED",
+  CLAIMED = "CLAIMED",
+  REFUNDED = "REFUNDED",
 }
 
 export interface Order {
@@ -226,10 +227,9 @@ export interface SwapStep {
   id: string;
   title: string;
   description: string;
-  status: 'pending' | 'active' | 'completed' | 'error';
+  status: "pending" | "active" | "completed" | "error";
   txHash?: Hash;
   chainId?: number;
 }
 
-export type SwapRole = 'maker' | 'taker';
-
+export type SwapRole = "maker" | "taker";
