@@ -2344,6 +2344,9 @@ export default function HomePage() {
           </button>
           <button
             onClick={() => {
+              if (!address) {
+                return;
+              }
               setShowMyOrders(true);
               setShowAllOrder(false);
               if (showMyOrders) {
@@ -2356,6 +2359,8 @@ export default function HomePage() {
                 ? "bg-secondary text-white"
                 : "bg-surface text-muted hover:bg-surface-light border border-white/10"
             }`}
+            disabled={!address ? true : false}
+            style={{ cursor: `${address}?pointer:disabled` }}
           >
             📋 My Orders
           </button>
