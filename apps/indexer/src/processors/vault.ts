@@ -296,15 +296,15 @@ async function processBscOrderMatched(
     if (!order) return;
 
     if (args.isPartial) {
-      await safeDbOperation(async () => {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: {
-            status: OrderStatus.PARTIALLY_FILLED,
-            takerAddress: args.recipient.toLowerCase(),
-          },
-        });
-      }, `update order ${order.id} partial`);
+      // await safeDbOperation(async () => {
+      //   await prisma.order.update({
+      //     where: { id: order.id },
+      //     data: {
+      //       status: "PARTIALLY_FILLED",
+      //       takerAddress: args.recipient.toLowerCase(),
+      //     },
+      //   });
+      // }, `update order ${order.id} partial`);
     } else {
       await safeDbOperation(async () => {
         await prisma.order.update({
