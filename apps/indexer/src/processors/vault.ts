@@ -220,6 +220,58 @@ async function processBscOrderCancelled(
   console.log(`Cancelled order ${order.id}`);
 }
 
+// async function processBscOrderMatched(
+//   event: ProcessedEvent,
+//   eventId: string
+// ): Promise<void> {
+//   try {
+//     const args = event.args as {
+//       dscOrderId: bigint;
+//       filler: Address;
+//       amount: bigint;
+//       isPartial: Boolean;
+//     };
+//     console.log(
+//       { args },
+//       "=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> process order filled"
+//     );
+//     const uniqueOrderId = args.dscOrderId + BigInt(1000000);
+
+//     const order = await safeDbOperation(async () => {
+//       return await prisma.order.findUnique({
+//         where: { orderId: uniqueOrderId },
+//       });
+//     }, `find order ${uniqueOrderId} for match`);
+
+//     if (!order) {
+//       console.warn(`Order ${uniqueOrderId} not found for match`);
+//       return;
+//     }
+
+//     // For BSC orders: maker is buyer, taker is seller
+//     await safeDbOperation(async () => {
+//       await prisma.order.update({
+//         where: { id: order.id },
+//         data: {
+//           status: OrderStatus.MAKER_LOCKED,
+//           takerAddress: args.filler.toLowerCase(), // Store taker address
+//         },
+//       });
+//     }, `update order ${order.id} status and taker`);
+
+//     await safeDbOperation(async () => {
+//       await prisma.event.update({
+//         where: { id: eventId },
+//         data: { orderId: order.id },
+//       });
+//     }, `link event ${eventId} to order ${order.id}`);
+
+//     console.log(`Matched order ${order.id} with taker ${args.filler}`);
+//   } catch (error) {
+//     console.log(error, "error in line 270");
+//   }
+// }
+
 async function processBscOrderMatched(
   event: ProcessedEvent,
   eventId: string
@@ -227,47 +279,52 @@ async function processBscOrderMatched(
   try {
     const args = event.args as {
       dscOrderId: bigint;
-      filler: Address;
+      bscOrderId: bigint;
+      recipient: Address;
       amount: bigint;
+      isPartial: boolean;
     };
-    console.log(
-      { args },
-      "=>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> process order filled"
-    );
-    const uniqueOrderId = args.dscOrderId + BigInt(1000000);
+
+    const uniqueOrderId = args.bscOrderId;
 
     const order = await safeDbOperation(async () => {
       return await prisma.order.findUnique({
         where: { orderId: uniqueOrderId },
       });
-    }, `find order ${uniqueOrderId} for match`);
+    }, `find order ${uniqueOrderId}`);
 
-    if (!order) {
-      console.warn(`Order ${uniqueOrderId} not found for match`);
-      return;
+    if (!order) return;
+
+    if (args.isPartial) {
+      await safeDbOperation(async () => {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: OrderStatus.PARTIALLY_FILLED,
+            takerAddress: args.recipient.toLowerCase(),
+          },
+        });
+      }, `update order ${order.id} partial`);
+    } else {
+      await safeDbOperation(async () => {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: OrderStatus.COMPLETED,
+            takerAddress: args.recipient.toLowerCase(),
+          },
+        });
+      }, `update order ${order.id} complete`);
     }
-
-    // For BSC orders: maker is buyer, taker is seller
-    await safeDbOperation(async () => {
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          status: OrderStatus.MAKER_LOCKED,
-          takerAddress: args.filler.toLowerCase(), // Store taker address
-        },
-      });
-    }, `update order ${order.id} status and taker`);
 
     await safeDbOperation(async () => {
       await prisma.event.update({
         where: { id: eventId },
         data: { orderId: order.id },
       });
-    }, `link event ${eventId} to order ${order.id}`);
-
-    console.log(`Matched order ${order.id} with taker ${args.filler}`);
+    }, `link event ${eventId}`);
   } catch (error) {
-    console.log(error, "error in line 270");
+    console.log(error);
   }
 }
 
@@ -551,9 +608,11 @@ async function processDscDirectFill(
   };
 
   console.log({ args }, "=>>>>>>>>> orderfilled");
+  const uniqueOrderId = args.dscOrderId + BigInt(1000000);
+
   // Find the BSC order that's being filled
   const bscOrder = await prisma.order.findUnique({
-    where: { orderId: args.bscOrderId },
+    where: { orderId: uniqueOrderId },
   });
 
   if (bscOrder && args.isPartial == false) {
