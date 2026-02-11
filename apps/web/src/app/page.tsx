@@ -32,6 +32,8 @@ interface CreateOrderModalProps {
 
 const FIXED_PRICE = "1.00"; // Fixed price $1
 
+// ordermodal
+
 function CreateOrderModal({
   isOpen,
   onClose,
@@ -41,17 +43,14 @@ function CreateOrderModal({
   const { openConnectModal } = useConnectModal();
   const { switchChainAsync } = useSwitchChain();
 
-  // Form state
   const [orderType, setOrderType] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
 
-  // Transaction state
   const [currentStep, setCurrentStep] = useState<
     "form" | "approving" | "creating" | "done" | "error"
   >("form");
   const [errorMessage, setErrorMessage] = useState("");
 
-  // Approval transaction
   const {
     data: approveHash,
     writeContractAsync: writeApproveAsync,
@@ -81,13 +80,13 @@ function CreateOrderModal({
   const amountWei = amount ? parseUnits(amount, 18) : BigInt(0);
 
   // DEBUG: Log addresses when modal opens
-  console.log("CreateOrderModal - Addresses:", {
-    orderType,
-    targetChainId,
-    vaultAddress,
-    usdtAddress,
-    expectedDscVault: "0xb4e3Ce07DD861dC10da09Ef7574A07b73470D99d",
-  });
+  // console.log("CreateOrderModal - Addresses:", {
+  //   orderType,
+  //   targetChainId,
+  //   vaultAddress,
+  //   usdtAddress,
+  //   expectedDscVault: "0xb4e3Ce07DD861dC10da09Ef7574A07b73470D99d",
+  // });
 
   // Watch for approval success -> auto trigger create
   useEffect(() => {
@@ -1811,6 +1810,7 @@ function OrderRow({
   onTradeClick,
   onCancelClick,
 }: OrderRowProps) {
+  // console.log(Number(order.orderId), "123");
   // Action/Status button component
   const ActionButton = () =>
     isMyOrders ? (
@@ -2009,24 +2009,17 @@ export default function HomePage() {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
   const [showMyOrders, setShowMyOrders] = useState(false);
+  const [showAllOrder, setShowAllOrder] = useState(false);
   const [statusFilter, setStatusFilter] = useState<
     "all" | "pending" | "success" | "cancel"
   >("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "buy" | "sell">("all");
   const listRef = useRef<HTMLDivElement>(null);
 
-  // =============================================================================
-  // Real Data Hooks - Fetch from blockchain and database
-  // =============================================================================
-
-  // P2P Integration - Smart contract interactions (only for creating orders, not reading)
   const p2p = useP2PIntegration();
 
-  // Database hooks for stats
   const { stats, loading: loadingStats } = useDbStats();
 
-  // Fetch ALL orders from database (not just OPEN - includes all statuses)
-  // Include OPEN and MATCHED/MAKER_LOCKED/TAKER_LOCKED orders for buy/sell display
   const {
     orders: dbOrders,
     loading: loadingDbOrders,
@@ -2111,13 +2104,10 @@ export default function HomePage() {
     return statusMatch && typeMatch;
   });
 
-  // Display orders based on current view
-  // For public orders, show OPEN and MATCHED/MAKER_LOCKED/TAKER_LOCKED (locked orders)
   const displayedOrders = showMyOrders
     ? filteredMyOrders
     : publicOrders.filter((order) => {
         if (order.type !== activeTab) return false;
-        // Show OPEN and locked orders (MATCHED/MAKER_LOCKED/TAKER_LOCKED)
         return (
           order.status === "OPEN" ||
           order.status === "MAKER_LOCKED" ||
@@ -2126,7 +2116,6 @@ export default function HomePage() {
         );
       });
 
-  // Fetch actual locked amount from contract for the active chain
   const [chainLockedAmount, setChainLockedAmount] = useState<number>(0);
   const [loadingLockedAmount, setLoadingLockedAmount] = useState(false);
 
@@ -2335,9 +2324,28 @@ export default function HomePage() {
           </button>
 
           {/* My Orders */}
+
           <button
             onClick={() => {
-              setShowMyOrders(!showMyOrders);
+              setShowAllOrder(true);
+              setShowMyOrders(false);
+              if (showAllOrder) {
+                setTypeFilter("all");
+                setStatusFilter("all");
+              }
+            }}
+            className={`px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+              showAllOrder
+                ? "bg-secondary text-white"
+                : "bg-surface text-muted hover:bg-surface-light border border-white/10"
+            }`}
+          >
+            📋 All Orders
+          </button>
+          <button
+            onClick={() => {
+              setShowMyOrders(true);
+              setShowAllOrder(false);
               if (showMyOrders) {
                 setTypeFilter("all");
                 setStatusFilter("all");
