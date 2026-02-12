@@ -462,6 +462,12 @@ export async function processDscVaultEvent(
     `[DSC] Processing ${decoded.eventName}=>>>>>>>>>>>>>>>>>>>>>>>>>>>>`
   );
   console.log(decoded.args, "decoded.args =>?????????????");
+  const cleanArgs = JSON.parse(
+    JSON.stringify(decoded.args, (_, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    )
+  );
+  console.log(cleanArgs, "cleaned args", decoded.args);
   // Store raw event (with retry)
   const event = await safeDbOperation(async () => {
     return await prisma.event.upsert({
@@ -480,11 +486,11 @@ export async function processDscVaultEvent(
         blockNumber: decoded.blockNumber,
         blockHash: decoded.blockHash,
         logIndex: decoded.logIndex,
-        args: decoded.args,
+        args: cleanArgs,
         processed: false,
       },
       update: {
-        args: decoded.args,
+        args: cleanArgs,
         blockHash: decoded.blockHash,
         removed: false,
       },
