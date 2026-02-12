@@ -461,7 +461,7 @@ export async function processDscVaultEvent(
   console.log(
     `[DSC] Processing ${decoded.eventName}=>>>>>>>>>>>>>>>>>>>>>>>>>>>>`
   );
-
+  console.log(decoded.args, "decoded.args =>?????????????");
   // Store raw event (with retry)
   const event = await safeDbOperation(async () => {
     return await prisma.event.upsert({
