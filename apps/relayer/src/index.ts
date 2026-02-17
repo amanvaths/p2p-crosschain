@@ -45,7 +45,7 @@ const config = {
       "https://bsc-dataseed1.binance.org",
     vaultAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_A_VAULT_CONTRACT ||
-        "0xA8644262F349cD2c19a524cc705c00780B7c42d3"
+        "0x841dEfA71568711C4fdc439917b41FA294428D91"
     ),
     usdtAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_A_USDT_CONTRACT ||

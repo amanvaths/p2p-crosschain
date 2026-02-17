@@ -2186,6 +2186,7 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [activeTab, showMyOrders]);
 
+  // console.log({ chainLockedAmount }); aasd
   const displayedTotalLocked = showMyOrders
     ? displayedOrders.reduce((sum, order) => {
         if (
