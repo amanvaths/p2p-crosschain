@@ -35,7 +35,7 @@ export const CONTRACT_ADDRESSES: Record<number, ContractAddresses> = {
   // DSC Chain - V2 Contract
   [DSC_CHAIN_ID]: {
     vault: (process.env.NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT ||
-      "0xB9Eb7a8433713A69B72C6d8aE1dD52F0D2E61dE7") as Address,
+      "0x9BDf589c341eC5C155a906F8c2163cF2bFD6A146") as Address,
     usdt: (process.env.NEXT_PUBLIC_CHAIN_B_USDT_CONTRACT ||
       "0xbc27aCEac6865dE31a286Cd9057564393D5251CB") as Address,
     bridgeRelayer: (process.env.NEXT_PUBLIC_BRIDGE_RELAYER ||

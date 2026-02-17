@@ -58,7 +58,7 @@ const config = {
       process.env.NEXT_PUBLIC_CHAIN_B_RPC_URL || "https://rpc01.dscscan.io/",
     vaultAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_B_VAULT_CONTRACT ||
-        "0xB9Eb7a8433713A69B72C6d8aE1dD52F0D2E61dE7"
+        "0x9BDf589c341eC5C155a906F8c2163cF2bFD6A146"
     ),
     usdtAddress: normalizeAddress(
       process.env.NEXT_PUBLIC_CHAIN_B_USDT_CONTRACT ||
@@ -238,6 +238,7 @@ async function getOpenBuyOrders(): Promise<OpenBuyOrder[]> {
 
 async function getOpenSellOrders(): Promise<OpenSellOrder[]> {
   try {
+    console.log(config.dsc.vaultAddress, "config.dsc.vaultAddress =>>>>>>>>>");
     const [orderIds, users, amounts, remainingAmounts, expiresAts] =
       await dscPublicClient.readContract({
         address: config.dsc.vaultAddress,
@@ -245,7 +246,7 @@ async function getOpenSellOrders(): Promise<OpenSellOrder[]> {
         functionName: "getOpenSellOrders",
         args: [0n, 100n],
       });
-
+    console.log({ orderIds, users, amounts, remainingAmounts, expiresAts });
     const orders: OpenSellOrder[] = [];
     for (let i = 0; i < orderIds.length; i++) {
       orders.push({
@@ -502,6 +503,7 @@ async function scanAndExecute() {
   const pendingFills = await getPendingFillOrders();
   const openBuyOrders = await getOpenBuyOrders();
   const openSellOrders = await getOpenSellOrders();
+  console.log(openSellOrders, "open sell order =>>>>>>>");
 
   console.log(`\n📊 ORDER STATUS`);
   console.log(`   BSC Buy Orders: ${openBuyOrders.length}`);
